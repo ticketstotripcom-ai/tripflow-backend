@@ -257,23 +257,23 @@ export class GoogleSheetsService {
     }
   }
 
-  /** Update an existing lead (Lovable-safe version) */
+  /** Update an existing lead (Lovable/browser-safe) */
 async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
-  console.log('🔄 Updating lead:', tripId, updates);
+  console.log('🔄 Updating lead (Lovable-safe):', tripId, updates);
 
   try {
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
     const leads = await this.fetchLeads();
     const leadIndex = leads.findIndex(l => l.tripId === tripId);
     if (leadIndex === -1) {
-      alert(`❌ Lead ${tripId} not found in Sheet.`);
+      alert(`❌ Lead ${tripId} not found.`);
       return;
     }
 
-    const rowNumber = leadIndex + 2; // row 1 = headers
+    const rowNumber = leadIndex + 2; // header = row 1
     const cm = this.config.columnMappings;
-    const updateData: { range: string; values: any[][] }[] = [];
 
+    const updateData: { range: string; values: any[][] }[] = [];
     for (const [key, value] of Object.entries(updates)) {
       if (value === undefined || ['tripId', 'date', 'notes'].includes(key)) continue;
       const col = cm[key as keyof typeof cm];
@@ -283,29 +283,26 @@ async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
 
     if (updateData.length === 0) return;
 
-    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+    const payload = {
+      valueInputOption: 'USER_ENTERED',
+      data: updateData,
+    };
+
+    let url = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
     let headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
+    // ✅ Prefer API Key — safest for Lovable
     if (this.config.apiKey) {
-      // Use API Key if available (Lovable-safe)
-      const url = `${batchUrl}?key=${this.config.apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      url += `?key=${this.config.apiKey}`;
     } else {
-      // Fallback to service account if no API key
-      const token = await this.getAccessToken();
-      headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(batchUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      console.warn('⚠️ No API key configured — using local-only update simulation.');
+      console.log('Simulated update:', JSON.stringify(payload, null, 2));
+      alert('ℹ️ Simulated update only (no API key). Configure API key for real writes.');
+      return;
     }
+
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(await res.text());
 
     console.log(`✅ Lead ${tripId} updated successfully.`);
     alert(`✅ Lead "${tripId}" updated in Google Sheet.`);
@@ -314,6 +311,7 @@ async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
     alert(`❌ Failed to update lead: ${err.message || err}`);
   }
 }
+
 
 // Settings management
 export const saveSettings = (config: GoogleSheetsConfig) => localStorage.setItem('googleSheetsConfig', JSON.stringify(config));
