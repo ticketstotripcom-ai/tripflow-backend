@@ -29,21 +29,25 @@ export const localSecrets = {
   
   // Column mappings for MASTER DATA (Column A is Trip ID, auto-generated)
   columnMappings: {
-    date: "B",
-    consultant: "C",
-    status: "D",
-    traveller_name: "E",
-    travel_date: "G",
-    travel_state: "H",
-    remarks: "K",
-    nights: "L",
-    pax: "M",
-    hotel_category: "N",
-    meal_plan: "O",
-    phone: "P",
-    email: "Q",
-    priority: "R"
-  },
+  trip_id: "A",
+  date: "B",
+  consultant: "C",
+  status: "D",
+  traveller_name: "E",
+  lead_source: "F",
+  travel_date: "G",
+  travel_state: "H",
+  destination: "I",
+  tickets_required: "J",
+  remarks: "K",
+  nights: "L",
+  pax: "M",
+  hotel_category: "N",
+  meal_plan: "O",
+  phone: "P",
+  email: "Q",
+  priority: "AN"  // last column
+},
   
   // Payment links and QR codes
   paymentLinks: [
