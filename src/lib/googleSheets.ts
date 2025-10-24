@@ -364,20 +364,22 @@ export class GoogleSheetsService {
         if (value !== undefined && key !== 'notes' && key !== 'tripId' && key !== 'date') {
           let column = '';
           switch (key) {
-            case 'consultant': column = cm.consultant || 'C'; break;
-            case 'status': column = cm.status || 'D'; break;
-            case 'travellerName': column = cm.traveller_name || 'E'; break;
-            case 'remarks': column = cm.remarks || 'K'; break;
-            case 'travelDate': column = cm.travel_date || 'G'; break;
-            case 'travelState': column = cm.travel_state || 'H'; break;
-            case 'nights': column = cm.nights || 'L'; break;
-            case 'pax': column = cm.pax || 'M'; break;
-            case 'hotelCategory': column = cm.hotel_category || 'N'; break;
-            case 'mealPlan': column = cm.meal_plan || 'O'; break;
-            case 'phone': column = cm.phone || 'P'; break;
-            case 'email': column = cm.email || 'Q'; break;
-            default: continue;
-          }
+  case 'consultant': column = cm.consultant; break;
+  case 'status': column = cm.status; break;
+  case 'travellerName': column = cm.travellerName; break;
+  case 'remarks': column = cm.remarks; break;
+  case 'travelDate': column = cm.travelDate; break;
+  case 'travelState': column = cm.travelState; break;
+  case 'nights': column = cm.nights; break;
+  case 'pax': column = cm.pax; break;
+  case 'hotelCategory': column = cm.hotelCategory; break;
+  case 'mealPlan': column = cm.mealPlan; break;
+  case 'phone': column = cm.phone; break;
+  case 'email': column = cm.email; break;
+  case 'priority': column = cm.priority; break;
+  default: continue;
+}
+
           
           const range = `${worksheetName}!${column}${rowNumber}`;
           updateData.push({
