@@ -125,6 +125,39 @@ export class GoogleSheetsService {
     return index - 1;
   }
 
+  /** Convert "07-April-25" (display format) to "yyyy-MM-dd" for app usage */
+  private formatSheetDateForInput(sheetDate: string): string {
+    if (!sheetDate) return '';
+    const parts = sheetDate.split('-'); // ["07", "April", "25"]
+    if (parts.length !== 3) return '';
+    const day = parts[0].padStart(2, '0');
+    const monthName = parts[1];
+    const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+    const monthMap: Record<string, string> = {
+      January: '01', February: '02', March: '03', April: '04',
+      May: '05', June: '06', July: '07', August: '08',
+      September: '09', October: '10', November: '11', December: '12'
+    };
+    const month = monthMap[monthName];
+    if (!month) return '';
+    return `${year}-${month}-${day}`; // "2025-04-07"
+  }
+
+  /** Convert ISO "yyyy-MM-dd" back to Sheet display format "dd-MMMM-yy" */
+  private formatDateForSheet(inputDate: string): string {
+    if (!inputDate) return '';
+    const d = new Date(inputDate);
+    if (isNaN(d.getTime())) return inputDate;
+    const day = d.getDate().toString().padStart(2, '0');
+    const monthNames = [
+      'January','February','March','April','May','June','July','August',
+      'September','October','November','December'
+    ];
+    const month = monthNames[d.getMonth()];
+    const year = d.getFullYear().toString().slice(-2); // last 2 digits
+    return `${day}-${month}-${year}`;
+  }
+
   /** Fetch users from the BACKEND SHEET */
   async fetchUsers(): Promise<SheetUser[]> {
     try {
@@ -165,7 +198,7 @@ export class GoogleSheetsService {
     }
   }
 
-  /** Fetch all leads using Date + Traveller Name (instead of Trip ID) */
+  /** Fetch all leads */
   async fetchLeads(): Promise<SheetLead[]> {
     try {
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
@@ -192,10 +225,36 @@ export class GoogleSheetsService {
         throw new Error('Column mappings not configured properly.');
       }
 
+      // Optional: Fetch notes (column K)
+      let notesMap: Record<number, string> = {};
+      try {
+        const notesUrl = this.config.apiKey
+          ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+              worksheetName
+            )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
+          : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+              worksheetName
+            )}!K2:K10000&fields=sheets.data.rowData.values.note`;
+
+        const notesHeaders = this.config.apiKey
+          ? {}
+          : { Authorization: `Bearer ${await this.getAccessToken()}` };
+        const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
+        if (notesResponse.ok) {
+          const notesData = await notesResponse.json();
+          const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
+          rowData.forEach((row: any, index: number) => {
+            if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to fetch notes:', err);
+      }
+
       return rows
         .map((row: any[], i: number) => ({
           tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
-          date: row[this.columnToIndex(cm.date || 'B')] || '',
+          date: this.formatSheetDateForInput(row[this.columnToIndex(cm.date || 'B')] || ''),
           consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
           status: row[this.columnToIndex(cm.status || 'D')] || '',
           travellerName: row[this.columnToIndex(cm.travellerName || 'E')] || '',
@@ -215,8 +274,9 @@ export class GoogleSheetsService {
                   .toString()
                   .split(';')
               : []) || [],
+          notes: notesMap[i] || '',
         }))
-        .filter((l) => l.date && l.travellerName); // require unique combination
+        .filter((l) => l.date && l.travellerName); // Keep only rows with date+traveller
     } catch (err) {
       console.error('❌ Error fetching leads:', err);
       throw err;
@@ -231,12 +291,21 @@ export class GoogleSheetsService {
       const token = await this.getAccessToken();
       const cm = this.config.columnMappings;
 
-      const row = new Array(26).fill('');
+      const tripId = lead.tripId || `T${Date.now()}`;
+      const date = lead.date || new Date().toISOString().split('T')[0];
+
+      const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
+      const row = new Array(maxCol + 1).fill('');
+
       for (const [key, col] of Object.entries(cm)) {
         if (!col) continue;
         const idx = this.columnToIndex(col);
         if (key in lead && lead[key as keyof SheetLead] !== undefined) {
-          const value = lead[key as keyof SheetLead];
+          let value = lead[key as keyof SheetLead];
+          // Auto-convert date fields
+          if (key === 'date' && typeof value === 'string') {
+            value = this.formatDateForSheet(value);
+          }
           row[idx] = Array.isArray(value) ? value.join('; ') : value;
         }
       }
@@ -255,48 +324,49 @@ export class GoogleSheetsService {
       });
 
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead appended successfully');
+      console.log('✅ Lead appended:', tripId);
     } catch (err) {
       console.error('❌ appendLead failed:', err);
       throw err;
     }
   }
 
-  /** Update an existing lead by Date + Traveller Name (instead of Trip ID) */
-  async updateLead(updates: Partial<SheetLead>): Promise<void> {
+  /** Update an existing lead using Date + Traveller Name */
+  async updateLeadByDateAndTraveller(date: string, travellerName: string, updates: Partial<SheetLead>): Promise<void> {
     try {
-      if (!updates.date || !updates.travellerName) throw new Error('Date + Traveller Name required to update lead');
+      if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required');
 
+      const token = await this.getAccessToken();
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-      const cm = this.config.columnMappings;
       const leads = await this.fetchLeads();
 
-      const leadRow = leads.find(
-        (l) =>
-          l.date?.trim() === updates.date?.trim() &&
-          l.travellerName?.trim().toLowerCase() === updates.travellerName?.trim().toLowerCase()
+      const leadIndex = leads.findIndex(
+        (l) => l.date === date && l.travellerName === travellerName
       );
+      if (leadIndex === -1) throw new Error(`Lead not found for ${date} + ${travellerName}`);
 
-      if (!leadRow) throw new Error(`Lead not found for Date=${updates.date}, Traveller=${updates.travellerName}`);
-
-      const rowNumber = leads.indexOf(leadRow) + 2; // header = row 1
-      const token = await this.getAccessToken();
-
+      const rowNumber = leadIndex + 2; // header = row 1
+      const cm = this.config.columnMappings;
       const updateData: { range: string; values: any[][] }[] = [];
+
       for (const [key, value] of Object.entries(updates)) {
         if (value === undefined || ['tripId', 'notes'].includes(key)) continue;
+
+        let updatedValue: any = value;
+
+        if (key === 'date' && typeof value === 'string') {
+          updatedValue = this.formatDateForSheet(value);
+        }
+
         const col = cm[key as keyof typeof cm];
         if (!col) {
           console.warn(`⚠️ Column mapping missing for "${key}", skipping`);
           continue;
         }
-        updateData.push({ range: `${worksheetName}!${col}${rowNumber}`, values: [[value]] });
+        updateData.push({ range: `${worksheetName}!${col}${rowNumber}`, values: [[updatedValue]] });
       }
 
-      if (updateData.length === 0) {
-        console.warn('⚠️ No valid fields to update.');
-        return;
-      }
+      if (updateData.length === 0) return;
 
       const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
       const res = await fetch(batchUrl, {
@@ -309,11 +379,9 @@ export class GoogleSheetsService {
       });
 
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead updated successfully');
-      if (typeof window !== 'undefined') alert?.('✅ Lead updated in Google Sheet');
+      console.log('✅ Lead updated successfully in Sheet');
     } catch (err) {
       console.error('❌ updateLead failed:', err);
-      if (typeof window !== 'undefined') alert?.('❌ Failed to update lead. Check console.');
       throw err;
     }
   }
