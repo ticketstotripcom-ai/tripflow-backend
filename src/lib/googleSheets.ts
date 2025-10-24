@@ -257,48 +257,61 @@ export class GoogleSheetsService {
     }
   }
 
-  /** Update an existing lead */
-  async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
-    console.log('🔄 Updating lead:', tripId, updates);
+  /** Update an existing lead (Lovable-safe version) */
+async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
+  console.log('🔄 Updating lead:', tripId, updates);
 
-    if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required');
+  try {
+    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    const leads = await this.fetchLeads();
+    const leadIndex = leads.findIndex(l => l.tripId === tripId);
+    if (leadIndex === -1) {
+      alert(`❌ Lead ${tripId} not found in Sheet.`);
+      return;
+    }
 
-    try {
-      const token = await this.getAccessToken();
-      const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-      const leads = await this.fetchLeads();
-      const leadIndex = leads.findIndex(l => l.tripId === tripId);
-      if (leadIndex === -1) throw new Error(`Lead ${tripId} not found`);
+    const rowNumber = leadIndex + 2; // row 1 = headers
+    const cm = this.config.columnMappings;
+    const updateData: { range: string; values: any[][] }[] = [];
 
-      const rowNumber = leadIndex + 2; // header = row 1
-      const cm = this.config.columnMappings;
-      const updateData: { range: string; values: any[][] }[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined || ['tripId', 'date', 'notes'].includes(key)) continue;
+      const col = cm[key as keyof typeof cm];
+      if (!col) continue;
+      updateData.push({ range: `${worksheetName}!${col}${rowNumber}`, values: [[value]] });
+    }
 
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === undefined || ['tripId', 'date', 'notes'].includes(key)) continue;
-        const col = cm[key as keyof typeof cm];
-        if (!col) {
-          console.warn(`⚠️ Column mapping missing for "${key}", skipping`);
-          continue;
-        }
-        updateData.push({ range: `${worksheetName}!${col}${rowNumber}`, values: [[value]] });
-      }
+    if (updateData.length === 0) return;
 
-      if (updateData.length === 0) return;
+    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-      const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
-      const res = await fetch(batchUrl, {
+    if (this.config.apiKey) {
+      // Use API Key if available (Lovable-safe)
+      const url = `${batchUrl}?key=${this.config.apiKey}`;
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
       });
-
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead updated successfully:', tripId);
-    } catch (err) {
-      console.error('❌ updateLead failed:', err);
-      throw err;
+    } else {
+      // Fallback to service account if no API key
+      const token = await this.getAccessToken();
+      headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(batchUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
+      });
+      if (!res.ok) throw new Error(await res.text());
     }
+
+    console.log(`✅ Lead ${tripId} updated successfully.`);
+    alert(`✅ Lead "${tripId}" updated in Google Sheet.`);
+  } catch (err: any) {
+    console.error('❌ updateLead failed:', err);
+    alert(`❌ Failed to update lead: ${err.message || err}`);
   }
 }
 
