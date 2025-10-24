@@ -325,120 +325,99 @@ export class GoogleSheetsService {
   }
 
   async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
-    console.log('🔄 Starting updateLead for:', tripId);
-    console.log('📦 Updates to apply:', updates);
-    
-    // Verify we have service account credentials
-    if (!this.config.serviceAccountJson) {
-      const errorMsg = 'Service Account JSON is required for updating leads. Please configure it in Settings or localSecrets.ts';
-      console.error('❌', errorMsg);
-      throw new Error(errorMsg);
-    }
-    
-    try {
-      // Get access token first
-      console.log('🔐 Getting access token...');
-      const token = await this.getAccessToken();
-      console.log('✅ Access token obtained');
-      
-      // Find the row number
-      console.log('🔍 Fetching leads to find row number...');
-      const leads = await this.fetchLeads();
-      const leadIndex = leads.findIndex(l => l.tripId === tripId);
-      
-      if (leadIndex === -1) {
-        throw new Error(`Lead with Trip ID ${tripId} not found in sheet`);
-      }
-      
-      const rowNumber = leadIndex + 2; // +2 because sheets are 1-indexed and row 1 is header
-      const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-      console.log(`✅ Found lead at row ${rowNumber} in worksheet "${worksheetName}"`);
-      
-      const cm = this.config.columnMappings;
-      const updatePromises: Promise<void>[] = [];
-      
-      // Build batch update data
-      const updateData: Array<{ range: string; values: any[][] }> = [];
-      
-      for (const [key, value] of Object.entries(updates)) {
-        if (value !== undefined && key !== 'notes' && key !== 'tripId' && key !== 'date') {
-          let column = '';
-          switch (key) {
-  case 'consultant': column = cm.consultant; break;
-  case 'status': column = cm.status; break;
-  case 'travellerName': column = cm.travellerName; break;
-  case 'remarks': column = cm.remarks; break;
-  case 'travelDate': column = cm.travelDate; break;
-  case 'travelState': column = cm.travelState; break;
-  case 'nights': column = cm.nights; break;
-  case 'pax': column = cm.pax; break;
-  case 'hotelCategory': column = cm.hotelCategory; break;
-  case 'mealPlan': column = cm.mealPlan; break;
-  case 'phone': column = cm.phone; break;
-  case 'email': column = cm.email; break;
-  case 'priority': column = cm.priority; break;
-  default: continue;
-}
+  console.log('🔄 Starting updateLead for Trip ID:', tripId);
+  console.log('📦 Updates to apply:', updates);
 
-          
-          const range = `${worksheetName}!${column}${rowNumber}`;
-          updateData.push({
-            range,
-            values: [[value]]
-          });
-          
-          console.log(`📝 Will update ${key} at ${range} with:`, value);
-        }
-      }
-      
-      if (updateData.length === 0) {
-        console.warn('⚠️ No valid fields to update');
-        return;
-      }
-      
-      // Use batchUpdate for better performance
-      const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
-      
-      console.log('🚀 Sending batch update to Google Sheets API...');
-      console.log('📍 URL:', batchUrl);
-      console.log('📦 Updating', updateData.length, 'fields');
-      
-      const response = await fetch(batchUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          valueInputOption: 'USER_ENTERED',
-          data: updateData
-        }),
-      });
-      
-      console.log('📥 Response status:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Google Sheets API Error Response:', errorText);
-        throw new Error(`Failed to update lead in Google Sheet: ${response.status} ${response.statusText}\n${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('✅ Google Sheets API Response:', result);
-      console.log('✅✅✅ Lead successfully updated in Google Sheet!');
-      
-    } catch (error: any) {
-      console.error('❌❌❌ CRITICAL ERROR updating lead:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        tripId,
-        updates
-      });
-      throw new Error(`Failed to update lead in Google Sheet: ${error.message}`);
+  if (!this.config.serviceAccountJson) {
+    throw new Error(
+      'Service Account JSON is required for updating leads. Please configure it in Settings or localSecrets.ts'
+    );
+  }
+
+  try {
+    // 1️⃣ Get access token
+    console.log('🔐 Getting access token...');
+    const token = await this.getAccessToken();
+    console.log('✅ Access token obtained');
+
+    // 2️⃣ Find the row number for the lead
+    console.log('🔍 Fetching leads to find row number...');
+    const leads = await this.fetchLeads();
+    const leadIndex = leads.findIndex(l => l.tripId === tripId);
+
+    if (leadIndex === -1) {
+      throw new Error(`Lead with Trip ID ${tripId} not found in sheet`);
     }
+
+    const rowNumber = leadIndex + 2; // +2 because row 1 is header
+    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    console.log(`✅ Found lead at row ${rowNumber} in worksheet "${worksheetName}"`);
+
+    const cm = this.config.columnMappings;
+    const updateData: Array<{ range: string; values: any[][] }> = [];
+
+    // 3️⃣ Build update data safely
+    for (const [key, value] of Object.entries(updates)) {
+      // skip uneditable fields
+      if (value === undefined || ['tripId', 'date', 'notes'].includes(key)) continue;
+
+      // get column from mapping
+      const column = cm[key as keyof typeof cm];
+      if (!column) {
+        console.warn(`⚠️ No column mapping found for key: ${key}`);
+        continue;
+      }
+
+      const range = `${worksheetName}!${column}${rowNumber}`;
+      updateData.push({ range, values: [[value]] });
+      console.log(`📝 Will update "${key}" at ${range} with:`, value);
+    }
+
+    if (updateData.length === 0) {
+      console.warn('⚠️ No valid fields to update');
+      return;
+    }
+
+    // 4️⃣ Send batch update to Google Sheets
+    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+    console.log('🚀 Sending batch update...');
+    console.log('📦 Fields to update:', updateData.length);
+
+    const response = await fetch(batchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: updateData,
+      }),
+    });
+
+    console.log('📥 Response status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Google Sheets API Error:', errorText);
+      throw new Error(`Failed to update lead in Google Sheet: ${response.status} ${response.statusText}\n${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Google Sheets API Response:', result);
+    console.log('✅✅✅ Lead successfully updated!');
+  } catch (error: any) {
+    console.error('❌❌❌ CRITICAL ERROR updating lead:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      tripId,
+      updates,
+    });
+    throw new Error(`Failed to update lead in Google Sheet: ${error.message}`);
   }
 }
+
 
 // Settings management using localStorage
 export const saveSettings = (config: GoogleSheetsConfig) => {
