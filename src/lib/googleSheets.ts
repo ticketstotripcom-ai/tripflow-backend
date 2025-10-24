@@ -46,6 +46,7 @@ export class GoogleSheetsService {
     this.config = config;
   }
 
+  /** Generate access token using Service Account JSON */
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
@@ -67,7 +68,8 @@ export class GoogleSheetsService {
         iat: now,
       };
 
-      const base64url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      const base64url = (str: string) =>
+        btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
       const headerEncoded = base64url(JSON.stringify(header));
       const payloadEncoded = base64url(JSON.stringify(payload));
       const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
@@ -77,7 +79,7 @@ export class GoogleSheetsService {
         .replace('-----END PRIVATE KEY-----', '')
         .replace(/\s/g, '');
 
-      const binaryKey = Uint8Array.from(atob(privateKey), c => c.charCodeAt(0));
+      const binaryKey = Uint8Array.from(atob(privateKey), (c) => c.charCodeAt(0));
       const cryptoKey = await crypto.subtle.importKey(
         'pkcs8',
         binaryKey,
@@ -86,8 +88,14 @@ export class GoogleSheetsService {
         ['sign']
       );
 
-      const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(unsignedToken));
-      const signatureBase64 = base64url(String.fromCharCode(...new Uint8Array(signature)));
+      const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        cryptoKey,
+        new TextEncoder().encode(unsignedToken)
+      );
+      const signatureBase64 = base64url(
+        String.fromCharCode(...new Uint8Array(signature))
+      );
       const jwt = `${unsignedToken}.${signatureBase64}`;
 
       const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -100,7 +108,7 @@ export class GoogleSheetsService {
 
       const data = await response.json();
       this.accessToken = data.access_token;
-      this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
+      this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000;
       return this.accessToken;
     } catch (error) {
       console.error('Error getting access token:', error);
@@ -108,6 +116,7 @@ export class GoogleSheetsService {
     }
   }
 
+  /** Convert column letter (e.g., 'C') to 0-based index */
   private columnToIndex(col: string): number {
     let index = 0;
     for (let i = 0; i < col.length; i++) {
@@ -116,7 +125,7 @@ export class GoogleSheetsService {
     return index - 1;
   }
 
-  /** Fetch all users from Google Sheets */
+  /** Fetch users from the BACKEND SHEET */
   async fetchUsers(): Promise<SheetUser[]> {
     try {
       const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
@@ -139,20 +148,24 @@ export class GoogleSheetsService {
       const rows = data.values || [];
       const cm = this.config.columnMappings;
 
-      return rows.map((row: any[]) => ({
-        name: row[this.columnToIndex(cm.name || 'C')] || '',
-        email: row[this.columnToIndex(cm.email || 'D')] || '',
-        phone: row[this.columnToIndex(cm.phone || 'E')] || '',
-        role: (row[this.columnToIndex(cm.role || 'M')] || 'consultant').toLowerCase() as 'admin' | 'consultant',
-        password: row[this.columnToIndex(cm.password || 'N')] || '',
-      })).filter(u => u.email && u.password);
+      return rows
+        .map((row: any[]) => ({
+          name: row[this.columnToIndex(cm.name || 'C')] || '',
+          email: row[this.columnToIndex(cm.email || 'D')] || '',
+          phone: row[this.columnToIndex(cm.phone || 'E')] || '',
+          role: (row[this.columnToIndex(cm.role || 'M')] || 'consultant').toLowerCase() as
+            | 'admin'
+            | 'consultant',
+          password: row[this.columnToIndex(cm.password || 'N')] || '',
+        }))
+        .filter((u) => u.email && u.password);
     } catch (err) {
       console.error('Error fetching users:', err);
       throw err;
     }
   }
 
-  /** Fetch all leads from Google Sheets */
+  /** ✅ FIXED: Fetch all leads using camelCase mapping keys */
   async fetchLeads(): Promise<SheetLead[]> {
     try {
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
@@ -175,14 +188,24 @@ export class GoogleSheetsService {
       const rows = data.values || [];
       const cm = this.config.columnMappings;
 
-      // Fetch notes
+      if (!cm || Object.keys(cm).length === 0) {
+        throw new Error('Column mappings not configured properly.');
+      }
+
+      // Optional: Fetch notes (column K)
       let notesMap: Record<number, string> = {};
       try {
         const notesUrl = this.config.apiKey
-          ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
-          : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}!K2:K10000&fields=sheets.data.rowData.values.note`;
+          ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+              worksheetName
+            )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
+          : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+              worksheetName
+            )}!K2:K10000&fields=sheets.data.rowData.values.note`;
 
-        const notesHeaders = this.config.apiKey ? {} : { 'Authorization': `Bearer ${await this.getAccessToken()}` };
+        const notesHeaders = this.config.apiKey
+          ? {}
+          : { Authorization: `Bearer ${await this.getAccessToken()}` };
         const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
         if (notesResponse.ok) {
           const notesData = await notesResponse.json();
@@ -191,34 +214,44 @@ export class GoogleSheetsService {
             if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
           });
         }
-      } catch (err) { console.warn('Failed to fetch notes:', err); }
+      } catch (err) {
+        console.warn('Failed to fetch notes:', err);
+      }
 
-      return rows.map((row: any[], i: number) => ({
-        tripId: row[this.columnToIndex(cm.trip_id || 'A')] || '',
-        date: row[this.columnToIndex(cm.date || 'B')] || '',
-        consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
-        status: row[this.columnToIndex(cm.status || 'D')] || '',
-        travellerName: row[this.columnToIndex(cm.traveller_name || 'E')] || '',
-        travelDate: row[this.columnToIndex(cm.travel_date || 'G')] || '',
-        travelState: row[this.columnToIndex(cm.travel_state || 'H')] || '',
-        remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
-        nights: row[this.columnToIndex(cm.nights || 'L')] || '',
-        pax: row[this.columnToIndex(cm.pax || 'M')] || '',
-        hotelCategory: row[this.columnToIndex(cm.hotel_category || 'N')] || '',
-        mealPlan: row[this.columnToIndex(cm.meal_plan || 'O')] || '',
-        phone: row[this.columnToIndex(cm.phone || 'P')] || '',
-        email: row[this.columnToIndex(cm.email || 'Q')] || '',
-        priority: row[this.columnToIndex(cm.priority || '')] || '',
-        remarkHistory: row[this.columnToIndex(cm.remarkHistory || '')]?.split(';') || [],
-        notes: notesMap[i] || '',
-      })).filter(l => l.tripId);
+      // ✅ Use camelCase keys matching SheetLead + columnMappings
+      return rows
+        .map((row: any[], i: number) => ({
+          tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
+          date: row[this.columnToIndex(cm.date || 'B')] || '',
+          consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
+          status: row[this.columnToIndex(cm.status || 'D')] || '',
+          travellerName: row[this.columnToIndex(cm.travellerName || 'E')] || '',
+          travelDate: row[this.columnToIndex(cm.travelDate || 'G')] || '',
+          travelState: row[this.columnToIndex(cm.travelState || 'H')] || '',
+          remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
+          nights: row[this.columnToIndex(cm.nights || 'L')] || '',
+          pax: row[this.columnToIndex(cm.pax || 'M')] || '',
+          hotelCategory: row[this.columnToIndex(cm.hotelCategory || 'N')] || '',
+          mealPlan: row[this.columnToIndex(cm.mealPlan || 'O')] || '',
+          phone: row[this.columnToIndex(cm.phone || 'P')] || '',
+          email: row[this.columnToIndex(cm.email || 'Q')] || '',
+          priority: row[this.columnToIndex(cm.priority || '')] || '',
+          remarkHistory:
+            (cm.remarkHistory
+              ? (row[this.columnToIndex(cm.remarkHistory || '')] || '')
+                  .toString()
+                  .split(';')
+              : []) || [],
+          notes: notesMap[i] || '',
+        }))
+        .filter((l) => l.tripId);
     } catch (err) {
-      console.error('Error fetching leads:', err);
+      console.error('❌ Error fetching leads:', err);
       throw err;
     }
   }
 
-  /** Append a new lead */
+  /** Add a new lead */
   async appendLead(lead: Partial<SheetLead>): Promise<void> {
     try {
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
@@ -229,10 +262,9 @@ export class GoogleSheetsService {
       const tripId = lead.tripId || `T${Date.now()}`;
       const date = lead.date || new Date().toISOString().split('T')[0];
 
-      const maxCol = Math.max(...Object.values(cm).map(c => this.columnToIndex(c)));
+      const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
       const row = new Array(maxCol + 1).fill('');
 
-      // Populate mapped columns
       for (const [key, col] of Object.entries(cm)) {
         if (!col) continue;
         const idx = this.columnToIndex(col);
@@ -242,10 +274,16 @@ export class GoogleSheetsService {
         }
       }
 
-      const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+      const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(
+        range
+      )}:append?valueInputOption=USER_ENTERED`;
+
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ values: [row] }),
       });
 
@@ -257,17 +295,16 @@ export class GoogleSheetsService {
     }
   }
 
-  /** Update an existing lead */
+  /** ✅ Update an existing lead by tripId */
   async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
     console.log('🔄 Updating lead:', tripId, updates);
-
     if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required');
 
     try {
       const token = await this.getAccessToken();
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
       const leads = await this.fetchLeads();
-      const leadIndex = leads.findIndex(l => l.tripId === tripId);
+      const leadIndex = leads.findIndex((l) => l.tripId === tripId);
       if (leadIndex === -1) throw new Error(`Lead ${tripId} not found`);
 
       const rowNumber = leadIndex + 2; // header = row 1
@@ -284,26 +321,39 @@ export class GoogleSheetsService {
         updateData.push({ range: `${worksheetName}!${col}${rowNumber}`, values: [[value]] });
       }
 
-      if (updateData.length === 0) return;
+      if (updateData.length === 0) {
+        console.warn('⚠️ No valid fields to update.');
+        return;
+      }
 
       const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
       const res = await fetch(batchUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
       });
 
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead updated successfully:', tripId);
+      console.log('✅ Lead updated successfully in Sheet:', tripId);
+
+      // Optional user feedback if running in browser
+      if (typeof window !== 'undefined') {
+        alert?.('✅ Lead updated in Google Sheet');
+      }
     } catch (err) {
       console.error('❌ updateLead failed:', err);
+      alert?.('❌ Failed to update lead. Check console for details.');
       throw err;
     }
   }
 }
 
 // Settings management
-export const saveSettings = (config: GoogleSheetsConfig) => localStorage.setItem('googleSheetsConfig', JSON.stringify(config));
+export const saveSettings = (config: GoogleSheetsConfig) =>
+  localStorage.setItem('googleSheetsConfig', JSON.stringify(config));
 export const loadSettings = (): GoogleSheetsConfig | null => {
   const stored = localStorage.getItem('googleSheetsConfig');
   return stored ? JSON.parse(stored) : null;
