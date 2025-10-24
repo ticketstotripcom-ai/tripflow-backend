@@ -1,4 +1,4 @@
-// GoogleSheetsService.ts
+// GoogleSheets.ts
 import { localSecrets } from './localSecrets';
 
 export interface SheetLead {
@@ -22,7 +22,7 @@ export interface SheetLead {
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
-export class GoogleSheetsService {
+export class GoogleSheets {
   private sheetId: string;
   private worksheetNames: string[];
   private columnMappings: Record<string, string>;
