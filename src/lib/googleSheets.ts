@@ -1,4 +1,6 @@
+// googleSheets.ts
 // Google Sheets API integration
+
 export interface GoogleSheetsConfig {
   apiKey?: string;
   serviceAccountJson?: string;
@@ -32,7 +34,7 @@ export interface SheetLead {
   email: string;
   priority?: string;
   remarkHistory?: string[];
-  notes?: string; // Cell notes from Column K
+  notes?: string; // Column K
 }
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -46,6 +48,7 @@ export class GoogleSheetsService {
     this.config = config;
   }
 
+  /** Generate access token using Service Account JSON */
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
@@ -101,7 +104,6 @@ export class GoogleSheetsService {
     });
 
     if (!response.ok) throw new Error(await response.text());
-
     const data = await response.json();
     this.accessToken = data.access_token;
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000;
@@ -116,6 +118,41 @@ export class GoogleSheetsService {
     return index - 1;
   }
 
+  /** Fetch users */
+  async fetchUsers(): Promise<SheetUser[]> {
+    const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
+    const range = `${worksheetName}!A2:Z1000`;
+
+    let url: string;
+    let headers: Record<string, string> = {};
+    if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+    } else {
+      const token = await this.getAccessToken();
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
+    const data = await response.json();
+    const rows = data.values || [];
+    const cm = this.config.columnMappings;
+
+    return rows
+      .map((row: any[]) => ({
+        name: row[this.columnToIndex(cm.name || 'C')] || '',
+        email: row[this.columnToIndex(cm.email || 'D')] || '',
+        phone: row[this.columnToIndex(cm.phone || 'E')] || '',
+        role: (row[this.columnToIndex(cm.role || 'M')] || 'consultant').toLowerCase() as
+          | 'admin'
+          | 'consultant',
+        password: row[this.columnToIndex(cm.password || 'N')] || '',
+      }))
+      .filter((u) => u.email && u.password);
+  }
+
+  /** Fetch leads */
   async fetchLeads(): Promise<SheetLead[]> {
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
     const range = `${worksheetName}!A2:AZ10000`;
@@ -136,6 +173,7 @@ export class GoogleSheetsService {
     const rows = data.values || [];
     const cm = this.config.columnMappings;
 
+    // Optional notes
     let notesMap: Record<number, string> = {};
     try {
       const notesUrl = this.config.apiKey
@@ -145,9 +183,8 @@ export class GoogleSheetsService {
         : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
             worksheetName
           )}!K2:K10000&fields=sheets.data.rowData.values.note`;
-      const notesHeaders = this.config.apiKey
-        ? {}
-        : { Authorization: `Bearer ${await this.getAccessToken()}` };
+
+      const notesHeaders = this.config.apiKey ? {} : { Authorization: `Bearer ${await this.getAccessToken()}` };
       const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
       if (notesResponse.ok) {
         const notesData = await notesResponse.json();
@@ -156,35 +193,87 @@ export class GoogleSheetsService {
           if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
         });
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch notes:', err);
+    }
 
-    return rows.map((row: any[], i: number) => ({
-      tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
-      dateAndTime: row[this.columnToIndex(cm.dateAndTime || 'B')] || '',
-      consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
-      status: row[this.columnToIndex(cm.status || 'D')] || '',
-      travellerName: row[this.columnToIndex(cm.travellerName || 'E')] || '',
-      travelDate: row[this.columnToIndex(cm.travelDate || 'G')] || '',
-      travelState: row[this.columnToIndex(cm.travelState || 'H')] || '',
-      remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
-      nights: row[this.columnToIndex(cm.nights || 'L')] || '',
-      pax: row[this.columnToIndex(cm.pax || 'M')] || '',
-      hotelCategory: row[this.columnToIndex(cm.hotelCategory || 'N')] || '',
-      mealPlan: row[this.columnToIndex(cm.mealPlan || 'O')] || '',
-      phone: row[this.columnToIndex(cm.phone || 'P')] || '',
-      email: row[this.columnToIndex(cm.email || 'Q')] || '',
-      priority: row[this.columnToIndex(cm.priority || '')] || '',
-      remarkHistory: (cm.remarkHistory ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';') : []) || [],
-      notes: notesMap[i] || '',
-    }));
+    return rows
+      .map((row: any[], i: number) => ({
+        tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
+        dateAndTime: row[this.columnToIndex(cm.dateAndTime || 'B')] || '',
+        consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
+        status: row[this.columnToIndex(cm.status || 'D')] || '',
+        travellerName: row[this.columnToIndex(cm.travellerName || 'E')] || '',
+        travelDate: row[this.columnToIndex(cm.travelDate || 'G')] || '',
+        travelState: row[this.columnToIndex(cm.travelState || 'H')] || '',
+        remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
+        nights: row[this.columnToIndex(cm.nights || 'L')] || '',
+        pax: row[this.columnToIndex(cm.pax || 'M')] || '',
+        hotelCategory: row[this.columnToIndex(cm.hotelCategory || 'N')] || '',
+        mealPlan: row[this.columnToIndex(cm.mealPlan || 'O')] || '',
+        phone: row[this.columnToIndex(cm.phone || 'P')] || '',
+        email: row[this.columnToIndex(cm.email || 'Q')] || '',
+        priority: row[this.columnToIndex(cm.priority || '')] || '',
+        remarkHistory:
+          (cm.remarkHistory
+            ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';')
+            : []) || [],
+        notes: notesMap[i] || '',
+      }))
+      .filter((l) => l.travellerName && l.dateAndTime);
   }
 
+  /** Append new lead */
+  async appendLead(lead: Partial<SheetLead>): Promise<void> {
+    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    const range = `${worksheetName}!A:Z`;
+    const token = await this.getAccessToken();
+    const cm = this.config.columnMappings;
+
+    const row: any[] = [];
+    const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
+
+    for (let i = 0; i <= maxCol; i++) row[i] = '';
+
+    for (const [key, col] of Object.entries(cm)) {
+      if (!col) continue;
+      const idx = this.columnToIndex(col);
+      if (key in lead && lead[key as keyof SheetLead] !== undefined) {
+        const value = lead[key as keyof SheetLead];
+        row[idx] = Array.isArray(value) ? value.join('; ') : value;
+      }
+    }
+
+    const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: [row] }),
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+    console.log('✅ Lead appended');
+  }
+
+  /** Normalize dates to "dd-MMMM-yy" */
+  private normalizeDate(dateStr: string): string {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr; // fallback
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = date.toLocaleString('default', { month: 'long' });
+    const year = date.getFullYear().toString().slice(-2);
+    return `${day}-${month}-${year}`;
+  }
+
+  /** Update lead using Date + Traveller Name */
   async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void> {
     if (!dateAndTime || !travellerName) throw new Error('Date + Traveller Name required to update lead');
 
     const leads = await this.fetchLeads();
+    const normalizedDate = this.normalizeDate(dateAndTime);
+
     const leadIndex = leads.findIndex(
-      (l) => l.dateAndTime === dateAndTime && l.travellerName === travellerName
+      (l) => this.normalizeDate(l.dateAndTime) === normalizedDate && l.travellerName === travellerName
     );
     if (leadIndex === -1) throw new Error('Lead not found');
 
