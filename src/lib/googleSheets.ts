@@ -183,7 +183,7 @@ export class GoogleSheetsService {
   async fetchLeads(): Promise<SheetLead[]> {
     try {
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-      const range = `${worksheetName}!A2:Z10000`;
+      const range = `${worksheetName}!A2:AZ10000`;
       
       let url: string;
       let headers: Record<string, string> = {};
