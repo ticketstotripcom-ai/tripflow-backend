@@ -165,7 +165,7 @@ export class GoogleSheetsService {
     }
   }
 
-  /** ✅ FIXED: Fetch all leads using camelCase mapping keys */
+  /** Fetch all leads using Date + Traveller Name (instead of Trip ID) */
   async fetchLeads(): Promise<SheetLead[]> {
     try {
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
@@ -192,33 +192,6 @@ export class GoogleSheetsService {
         throw new Error('Column mappings not configured properly.');
       }
 
-      // Optional: Fetch notes (column K)
-      let notesMap: Record<number, string> = {};
-      try {
-        const notesUrl = this.config.apiKey
-          ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
-              worksheetName
-            )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
-          : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
-              worksheetName
-            )}!K2:K10000&fields=sheets.data.rowData.values.note`;
-
-        const notesHeaders = this.config.apiKey
-          ? {}
-          : { Authorization: `Bearer ${await this.getAccessToken()}` };
-        const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
-        if (notesResponse.ok) {
-          const notesData = await notesResponse.json();
-          const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
-          rowData.forEach((row: any, index: number) => {
-            if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
-          });
-        }
-      } catch (err) {
-        console.warn('Failed to fetch notes:', err);
-      }
-
-      // ✅ Use camelCase keys matching SheetLead + columnMappings
       return rows
         .map((row: any[], i: number) => ({
           tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
@@ -242,9 +215,8 @@ export class GoogleSheetsService {
                   .toString()
                   .split(';')
               : []) || [],
-          notes: notesMap[i] || '',
         }))
-        .filter((l) => l.tripId);
+        .filter((l) => l.date && l.travellerName); // require unique combination
     } catch (err) {
       console.error('❌ Error fetching leads:', err);
       throw err;
@@ -259,12 +231,7 @@ export class GoogleSheetsService {
       const token = await this.getAccessToken();
       const cm = this.config.columnMappings;
 
-      const tripId = lead.tripId || `T${Date.now()}`;
-      const date = lead.date || new Date().toISOString().split('T')[0];
-
-      const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
-      const row = new Array(maxCol + 1).fill('');
-
+      const row = new Array(26).fill('');
       for (const [key, col] of Object.entries(cm)) {
         if (!col) continue;
         const idx = this.columnToIndex(col);
@@ -288,31 +255,36 @@ export class GoogleSheetsService {
       });
 
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead appended:', tripId);
+      console.log('✅ Lead appended successfully');
     } catch (err) {
       console.error('❌ appendLead failed:', err);
       throw err;
     }
   }
 
-  /** ✅ Update an existing lead by tripId */
-  async updateLead(tripId: string, updates: Partial<SheetLead>): Promise<void> {
-    console.log('🔄 Updating lead:', tripId, updates);
-    if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required');
-
+  /** Update an existing lead by Date + Traveller Name (instead of Trip ID) */
+  async updateLead(updates: Partial<SheetLead>): Promise<void> {
     try {
-      const token = await this.getAccessToken();
+      if (!updates.date || !updates.travellerName) throw new Error('Date + Traveller Name required to update lead');
+
       const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-      const leads = await this.fetchLeads();
-      const leadIndex = leads.findIndex((l) => l.tripId === tripId);
-      if (leadIndex === -1) throw new Error(`Lead ${tripId} not found`);
-
-      const rowNumber = leadIndex + 2; // header = row 1
       const cm = this.config.columnMappings;
-      const updateData: { range: string; values: any[][] }[] = [];
+      const leads = await this.fetchLeads();
 
+      const leadRow = leads.find(
+        (l) =>
+          l.date?.trim() === updates.date?.trim() &&
+          l.travellerName?.trim().toLowerCase() === updates.travellerName?.trim().toLowerCase()
+      );
+
+      if (!leadRow) throw new Error(`Lead not found for Date=${updates.date}, Traveller=${updates.travellerName}`);
+
+      const rowNumber = leads.indexOf(leadRow) + 2; // header = row 1
+      const token = await this.getAccessToken();
+
+      const updateData: { range: string; values: any[][] }[] = [];
       for (const [key, value] of Object.entries(updates)) {
-        if (value === undefined || ['tripId', 'date', 'notes'].includes(key)) continue;
+        if (value === undefined || ['tripId', 'notes'].includes(key)) continue;
         const col = cm[key as keyof typeof cm];
         if (!col) {
           console.warn(`⚠️ Column mapping missing for "${key}", skipping`);
@@ -337,15 +309,11 @@ export class GoogleSheetsService {
       });
 
       if (!res.ok) throw new Error(await res.text());
-      console.log('✅ Lead updated successfully in Sheet:', tripId);
-
-      // Optional user feedback if running in browser
-      if (typeof window !== 'undefined') {
-        alert?.('✅ Lead updated in Google Sheet');
-      }
+      console.log('✅ Lead updated successfully');
+      if (typeof window !== 'undefined') alert?.('✅ Lead updated in Google Sheet');
     } catch (err) {
       console.error('❌ updateLead failed:', err);
-      alert?.('❌ Failed to update lead. Check console for details.');
+      if (typeof window !== 'undefined') alert?.('❌ Failed to update lead. Check console.');
       throw err;
     }
   }
