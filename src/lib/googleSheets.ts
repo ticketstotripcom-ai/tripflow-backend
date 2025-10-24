@@ -23,7 +23,7 @@ export interface SheetLead {
   consultant: string;
   status: string;
   travellerName: string;
-  travelDate: string;
+  travelDate: string; // Column G
   travelState: string;
   remarks: string;
   nights: string;
@@ -255,14 +255,19 @@ export class GoogleSheetsService {
     console.log('✅ Lead appended');
   }
 
-  /** Normalize dates to "dd-MMMM-yy" */
+  /** Normalize mm/dd/yyyy dates to "dd-MMMM-yy" */
   private normalizeDate(dateStr: string): string {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr; // fallback
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('default', { month: 'long' });
-    const year = date.getFullYear().toString().slice(-2);
-    return `${day}-${month}-${year}`;
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return dateStr;
+    const [month, day, year] = parts.map(Number);
+    if (!month || !day || !year) return dateStr;
+
+    const date = new Date(year, month - 1, day);
+    const dayStr = day.toString().padStart(2, '0');
+    const monthStr = date.toLocaleString('default', { month: 'long' });
+    const yearStr = year.toString().slice(-2);
+
+    return `${dayStr}-${monthStr}-${yearStr}`;
   }
 
   /** Update lead using Date + Traveller Name */
