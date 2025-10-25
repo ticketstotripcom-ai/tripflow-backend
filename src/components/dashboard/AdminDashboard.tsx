@@ -106,8 +106,8 @@ const AdminDashboard = () => {
     });
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
 
-  // Categorize leads by status
-  const newLeads = useMemo(() =>
+  // 🆕 NEW LEADS: blank or "unfollowed"
+const newLeads = useMemo(() =>
   filteredLeads.filter(lead => {
     const status = (lead.status || "").toLowerCase();
     const hasData =
@@ -116,30 +116,37 @@ const AdminDashboard = () => {
       lead.tripId?.trim();
 
     return (
-      hasData && (status === "" ||
-      status.includes("unfollowed")
+      hasData &&
+      (status === "" || status.includes("unfollowed"))
     );
   }),
   [filteredLeads]
 );
 
+// ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+const workingLeads = useMemo(() =>
+  filteredLeads.filter(lead => {
+    const status = (lead.status || "").toLowerCase();
+    return (
+      status.includes("follow-up") ||
+      status.includes("working") ||
+      status.includes("whatsapp") ||
+      status.includes("proposal") ||
+      status.includes("negotiations") ||
+      status.includes("hot")
+    );
+  }),
+  [filteredLeads]
+);
 
-  const workingLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      status.includes("follow-up")) ||
-      lead.status.toLowerCase().includes('working') || 
-      lead.status.toLowerCase().includes('whatsapp') ||
-      lead.status.toLowerCase().includes('proposal') ||
-      lead.status.toLowerCase().includes('negotiations') ||
-      lead.status.toLowerCase().includes('hot')
-    ), [filteredLeads]
-  );
+// ✅ BOOKED LEADS: booked with us
+const bookedLeads = useMemo(() =>
+  filteredLeads.filter(lead =>
+    (lead.status || "").toLowerCase().includes("booked with us")
+  ),
+  [filteredLeads]
+);
 
-  const bookedLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('booked with us')
-    ), [filteredLeads]
-  );
 
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
