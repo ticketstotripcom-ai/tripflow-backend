@@ -1,14 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
-import { Users, TrendingUp, CheckCircle, Clock } from "lucide-react";
+import { Users, TrendingUp, CheckCircle, Clock, Flame } from "lucide-react";
 import { useMemo, useState } from "react";
 import LeadsDetailDialog from "./LeadsDetailDialog";
+import HotLeadsDialog from "./HotLeadsDialog";
 
 interface DashboardStatsProps {
   leads: SheetLead[];
 }
 
-type StatCategory = 'total' | 'new' | 'working' | 'booked';
+type StatCategory = 'total' | 'new' | 'working' | 'booked' | 'hot';
 
 const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const [selectedCategory, setSelectedCategory] = useState<StatCategory | null>(null);
@@ -39,8 +40,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         status.includes("working") ||
         status.includes("whatsapp") ||
         status.includes("proposal") ||
-        status.includes("negotiations") ||
-        status.includes("hot")
+        status.includes("negotiations")
       );
     }),
     [leads]
@@ -50,6 +50,14 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const bookedLeads = useMemo(() =>
     leads.filter(lead =>
       (lead.status || "").toLowerCase().includes("booked with us")
+    ),
+    [leads]
+  );
+
+  // 🔥 HOT LEADS: status contains "hot"
+  const hotLeads = useMemo(() =>
+    leads.filter(lead =>
+      (lead.status || "").toLowerCase().includes("hot")
     ),
     [leads]
   );
@@ -86,6 +94,15 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
       leads: workingLeads,
     },
     {
+      title: "Hot Leads",
+      value: hotLeads.length,
+      icon: Flame,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50 dark:bg-orange-950/20",
+      category: 'hot' as StatCategory,
+      leads: hotLeads,
+    },
+    {
       title: "Booked",
       value: bookedLeads.length,
       icon: CheckCircle,
@@ -105,7 +122,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   return (
     <>
       <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
@@ -139,14 +156,23 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         </div>
       </div>
 
-      {/* Detail Dialog */}
-      {selectedStat && (
+      {/* Detail Dialog for Total, New, Working, Booked */}
+      {selectedStat && selectedCategory !== 'hot' && (
         <LeadsDetailDialog
           open={!!selectedCategory}
           onClose={() => setSelectedCategory(null)}
           title={selectedStat.title}
           leads={selectedStat.leads}
           color={selectedStat.color}
+        />
+      )}
+
+      {/* Hot Leads List Dialog */}
+      {selectedCategory === 'hot' && (
+        <HotLeadsDialog
+          open={selectedCategory === 'hot'}
+          onClose={() => setSelectedCategory(null)}
+          leads={hotLeads}
         />
       )}
     </>
