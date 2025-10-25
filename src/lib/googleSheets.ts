@@ -179,7 +179,7 @@ export class GoogleSheetsService {
     });
 
     if (targetRow === -1) throw new Error('Lead not found in sheet');
-    const actualRow = targetRow+2; // exact row number in sheet
+    const actualRow = targetRow + 1; // exact row number in sheet
 
     const data: { range: string; values: any[][] }[] = [];
     for (const [key, value] of Object.entries(updates)) {
