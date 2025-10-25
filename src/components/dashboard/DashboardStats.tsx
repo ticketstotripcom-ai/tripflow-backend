@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
 import { Users, TrendingUp, CheckCircle, Flame, Target } from "lucide-react";
 import { useMemo, useState } from "react";
-import LeadsDetailDialog from "./LeadsDetailDialog";
+import LeadDetailDialog from "./LeadDetailDialog"; // ✅ Changed import name
 import HotLeadsDialog from "./HotLeadsDialog";
 
 interface DashboardStatsProps {
@@ -14,7 +14,7 @@ type StatCategory = 'total' | 'working' | 'booked' | 'hot';
 const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const [selectedCategory, setSelectedCategory] = useState<StatCategory | null>(null);
 
-  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+  // ⚙️ WORKING LEADS
   const workingLeads = useMemo(() =>
     leads.filter(lead => {
       const status = (lead.status || "").toLowerCase();
@@ -29,7 +29,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     [leads]
   );
 
-  // ✅ BOOKED LEADS: booked with us
+  // ✅ BOOKED LEADS
   const bookedLeads = useMemo(() =>
     leads.filter(lead =>
       (lead.status || "").toLowerCase().includes("booked with us")
@@ -37,7 +37,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     [leads]
   );
 
-  // 🔥 HOT LEADS: status contains "hot"
+  // 🔥 HOT LEADS
   const hotLeads = useMemo(() =>
     leads.filter(lead =>
       (lead.status || "").toLowerCase().includes("hot")
@@ -89,7 +89,6 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     },
   ];
 
-  // Bottom analytics cards - Only 2 cards
   const analyticsCards = [
     {
       title: "Conversion Rate",
@@ -118,7 +117,6 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   return (
     <>
       <div className="space-y-4">
-        {/* Top Stats Row - 4 cards only */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {topStats.map((stat) => {
             const Icon = stat.icon;
@@ -152,7 +150,6 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
           })}
         </div>
 
-        {/* Bottom Analytics Row - 2 cards only */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {analyticsCards.map((card) => {
             const Icon = card.icon;
@@ -177,9 +174,8 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         </div>
       </div>
 
-      {/* Detail Dialog for Total, Working, Booked */}
       {selectedStat && selectedCategory !== 'hot' && (
-        <LeadsDetailDialog
+        <LeadDetailDialog
           open={!!selectedCategory}
           onClose={() => setSelectedCategory(null)}
           title={selectedStat.title}
@@ -188,7 +184,6 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         />
       )}
 
-      {/* Hot Leads Grid Dialog */}
       {selectedCategory === 'hot' && (
         <HotLeadsDialog
           open={selectedCategory === 'hot'}
