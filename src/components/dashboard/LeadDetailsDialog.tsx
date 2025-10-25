@@ -42,92 +42,121 @@ const LEAD_STATUSES = [
 
 const HOTEL_CATEGORIES = ["Basic", "3 Star", "3 Star Plus", "4 Star", "5 Star"];
 
-// ✅ Helper function to convert various date formats to yyyy-mm-dd for HTML input
-const parseToInputDate = (dateStr: string): string => {
+/**
+ * ✅ Convert mm/dd/yyyy (Google Sheets) → dd/mm/yyyy (Display)
+ */
+const convertToDisplayDate = (dateStr: string): string => {
   if (!dateStr) return '';
   
   const s = String(dateStr).trim();
   
-  // Try mm/dd/yyyy format
+  // Parse mm/dd/yyyy format from Google Sheets
   const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (m1) {
-    const mm = Number(m1[1]);
-    const dd = Number(m1[2]);
-    let yyyy = Number(m1[3]);
-    if (yyyy < 100) yyyy = 2000 + yyyy;
-    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-  }
-  
-  // Try dd-Month-yy format (e.g., 25-Oct-2025)
-  const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
-  if (m2) {
-    const dd = Number(m2[1]);
-    const monthName = m2[2];
-    let yyyy = Number(m2[3]);
-    if (yyyy < 100) yyyy = 2000 + yyyy;
-    
-    const date = new Date(`${monthName} ${dd}, ${yyyy}`);
-    if (!isNaN(date.getTime())) {
-      const mm = date.getMonth() + 1;
-      return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    const mm = String(m1[1]).padStart(2, '0');
+    const dd = String(m1[2]).padStart(2, '0');
+    let yyyy = m1[3];
+    if (yyyy.length === 2) {
+      yyyy = '20' + yyyy;
     }
+    return `${dd}/${mm}/${yyyy}`; // Return dd/mm/yyyy
   }
   
-  // Try yyyy-mm-dd (already in correct format)
-  const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m3) {
+  // Already in dd/mm/yyyy format
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m2 && Number(m2[1]) > 12) {
+    // First number > 12, so it's already dd/mm/yyyy
     return s;
   }
   
-  // Fallback: try native Date parsing
-  try {
-    const date = new Date(s);
-    if (!isNaN(date.getTime())) {
-      const yyyy = date.getFullYear();
-      const mm = date.getMonth() + 1;
-      const dd = date.getDate();
-      return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-    }
-  } catch (e) {
-    console.warn('Failed to parse date:', s);
-  }
-  
-  return '';
+  return dateStr; // Fallback: return as-is
 };
 
-// ✅ Helper to format display date (for showing in labels/text)
-const formatDisplayDate = (dateStr: string): string => {
+/**
+ * ✅ Convert dd/mm/yyyy (Display) → mm/dd/yyyy (Google Sheets)
+ */
+const convertToSheetDate = (dateStr: string): string => {
   if (!dateStr) return '';
   
-  try {
-    const isoDate = parseToInputDate(dateStr);
-    if (!isoDate) return dateStr;
+  const s = String(dateStr).trim();
+  
+  // Parse dd/mm/yyyy format from display
+  const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m1) {
+    const dd = m1[1];
+    const mm = m1[2];
+    const yyyy = m1[3];
     
-    const date = new Date(isoDate);
-    if (isNaN(date.getTime())) return dateStr;
+    // Check if it's likely dd/mm/yyyy (day > 12)
+    if (Number(dd) > 12) {
+      return `${mm}/${dd}/${yyyy}`; // Convert to mm/dd/yyyy
+    }
     
-    return date.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
-  } catch (e) {
-    return dateStr;
+    // Ambiguous case (both < 12), assume it's already dd/mm/yyyy since user entered it
+    return `${mm}/${dd}/${yyyy}`;
   }
+  
+  return dateStr; // Fallback: return as-is
+};
+
+/**
+ * ✅ Validate dd/mm/yyyy format
+ */
+const isValidDateFormat = (dateStr: string): boolean => {
+  if (!dateStr) return true; // Empty is valid
+  
+  const regex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+  const match = dateStr.match(regex);
+  
+  if (!match) return false;
+  
+  const dd = Number(match[1]);
+  const mm = Number(match[2]);
+  const yyyy = Number(match[3]);
+  
+  // Validate ranges
+  if (dd < 1 || dd > 31) return false;
+  if (mm < 1 || mm > 12) return false;
+  if (yyyy < 1900 || yyyy > 2100) return false;
+  
+  return true;
 };
 
 const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogProps) => {
-  // ✅ Convert travel date to input format on initial load
+  // ✅ Convert travel date from mm/dd/yyyy to dd/mm/yyyy for display
   const [formData, setFormData] = useState<SheetLead>({
     ...lead,
-    travelDate: parseToInputDate(lead.travelDate) // Convert to yyyy-mm-dd
+    travelDate: convertToDisplayDate(lead.travelDate),
   });
   
   const [saving, setSaving] = useState(false);
   const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [dateError, setDateError] = useState<string>('');
   const { toast } = useToast();
 
+  const handleDateChange = (value: string) => {
+    setFormData({ ...formData, travelDate: value });
+    
+    // Validate format as user types
+    if (value && !isValidDateFormat(value)) {
+      setDateError('Use dd/mm/yyyy format (e.g., 25/10/2025)');
+    } else {
+      setDateError('');
+    }
+  };
+
   const handleSave = async () => {
+    // Validate date before saving
+    if (formData.travelDate && !isValidDateFormat(formData.travelDate)) {
+      toast({
+        variant: "destructive",
+        title: "❌ Invalid date format",
+        description: "Please use dd/mm/yyyy format (e.g., 25/10/2025)",
+        duration: 3000,
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       
@@ -150,10 +179,17 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         columnMappings: credentials.columnMappings
       });
 
+      // ✅ Convert travel date from dd/mm/yyyy back to mm/dd/yyyy for Google Sheets
+      const dataToSave = {
+        ...formData,
+        travelDate: convertToSheetDate(formData.travelDate),
+      };
+
       console.log('🚀 Calling updateLead...');
-      // ✅ The travelDate is already in yyyy-mm-dd format, 
-      // googleSheets.ts will convert it to mm/dd/yyyy for storage
-      await sheetsService.updateLead(lead, formData);
+      console.log('Original date (display):', formData.travelDate);
+      console.log('Converted date (sheet):', dataToSave.travelDate);
+      
+      await sheetsService.updateLead(lead, dataToSave);
       console.log('✅ updateLead completed');
 
       toast({
@@ -241,18 +277,23 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
             <div className="space-y-2">
               <Label>
                 Travel Date
-                {/* ✅ Show original date in readable format next to label */}
-                {lead.travelDate && (
-                  <span className="text-xs text-muted-foreground ml-2">
-                    ({formatDisplayDate(lead.travelDate)})
-                  </span>
-                )}
+                <span className="text-xs text-muted-foreground ml-2">
+                  (dd/mm/yyyy)
+                </span>
               </Label>
               <Input 
-                type="date"
+                type="text"
+                placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
                 value={formData.travelDate} 
-                onChange={(e) => setFormData({ ...formData, travelDate: e.target.value })}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className={dateError ? 'border-red-500' : ''}
               />
+              {dateError && (
+                <p className="text-xs text-red-500">{dateError}</p>
+              )}
+              {formData.travelDate && !dateError && (
+                <p className="text-xs text-green-600">✓ Valid date format</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Travel State</Label>
@@ -362,7 +403,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || !!dateError}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
