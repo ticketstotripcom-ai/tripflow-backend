@@ -42,8 +42,87 @@ const LEAD_STATUSES = [
 
 const HOTEL_CATEGORIES = ["Basic", "3 Star", "3 Star Plus", "4 Star", "5 Star"];
 
+// ✅ Helper function to convert various date formats to yyyy-mm-dd for HTML input
+const parseToInputDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  const s = String(dateStr).trim();
+  
+  // Try mm/dd/yyyy format
+  const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m1) {
+    const mm = Number(m1[1]);
+    const dd = Number(m1[2]);
+    let yyyy = Number(m1[3]);
+    if (yyyy < 100) yyyy = 2000 + yyyy;
+    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  }
+  
+  // Try dd-Month-yy format (e.g., 25-Oct-2025)
+  const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
+  if (m2) {
+    const dd = Number(m2[1]);
+    const monthName = m2[2];
+    let yyyy = Number(m2[3]);
+    if (yyyy < 100) yyyy = 2000 + yyyy;
+    
+    const date = new Date(`${monthName} ${dd}, ${yyyy}`);
+    if (!isNaN(date.getTime())) {
+      const mm = date.getMonth() + 1;
+      return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    }
+  }
+  
+  // Try yyyy-mm-dd (already in correct format)
+  const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m3) {
+    return s;
+  }
+  
+  // Fallback: try native Date parsing
+  try {
+    const date = new Date(s);
+    if (!isNaN(date.getTime())) {
+      const yyyy = date.getFullYear();
+      const mm = date.getMonth() + 1;
+      const dd = date.getDate();
+      return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    }
+  } catch (e) {
+    console.warn('Failed to parse date:', s);
+  }
+  
+  return '';
+};
+
+// ✅ Helper to format display date (for showing in labels/text)
+const formatDisplayDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  try {
+    const isoDate = parseToInputDate(dateStr);
+    if (!isoDate) return dateStr;
+    
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogProps) => {
-  const [formData, setFormData] = useState(lead);
+  // ✅ Convert travel date to input format on initial load
+  const [formData, setFormData] = useState<SheetLead>({
+    ...lead,
+    travelDate: parseToInputDate(lead.travelDate) // Convert to yyyy-mm-dd
+  });
+  
   const [saving, setSaving] = useState(false);
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const { toast } = useToast();
@@ -72,6 +151,8 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       });
 
       console.log('🚀 Calling updateLead...');
+      // ✅ The travelDate is already in yyyy-mm-dd format, 
+      // googleSheets.ts will convert it to mm/dd/yyyy for storage
       await sheetsService.updateLead(lead, formData);
       console.log('✅ updateLead completed');
 
@@ -158,7 +239,15 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Travel Date</Label>
+              <Label>
+                Travel Date
+                {/* ✅ Show original date in readable format next to label */}
+                {lead.travelDate && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({formatDisplayDate(lead.travelDate)})
+                  </span>
+                )}
+              </Label>
               <Input 
                 type="date"
                 value={formData.travelDate} 
