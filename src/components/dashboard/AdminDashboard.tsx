@@ -107,15 +107,26 @@ const AdminDashboard = () => {
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
 
   // Categorize leads by status
-  const newLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('unfollowed') || 
-      lead.status.toLowerCase().includes('follow-up')
-    ), [filteredLeads]
-  );
+  const newLeads = useMemo(() =>
+  filteredLeads.filter(lead => {
+    const status = (lead.status || "").toLowerCase();
+    const hasData =
+      lead.travellerName?.trim() ||
+      lead.phone?.trim() ||
+      lead.tripId?.trim();
+
+    return (
+      hasData && (status === "" ||
+      status.includes("unfollowed"))
+    );
+  }),
+  [filteredLeads]
+);
+
 
   const workingLeads = useMemo(() => 
     filteredLeads.filter(lead => 
+      status.includes("follow-up")) ||
       lead.status.toLowerCase().includes('working') || 
       lead.status.toLowerCase().includes('whatsapp') ||
       lead.status.toLowerCase().includes('proposal') ||
