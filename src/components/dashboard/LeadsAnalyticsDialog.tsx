@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, TrendingUp, Users as UsersIcon, Calendar } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface LeadsDetailDialogProps {
+interface LeadsAnalyticsDialogProps {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -13,7 +13,7 @@ interface LeadsDetailDialogProps {
   color: string;
 }
 
-const LeadsDetailDialog = ({ open, onClose, title, leads, color }: LeadsDetailDialogProps) => {
+const LeadsAnalyticsDialog = ({ open, onClose, title, leads, color }: LeadsAnalyticsDialogProps) => {
   
   // Group leads by state
   const leadsByState = useMemo(() => {
@@ -46,7 +46,6 @@ const LeadsDetailDialog = ({ open, onClose, title, leads, color }: LeadsDetailDi
   // Calculate monthly trend (last 6 months)
   const monthlyTrend = useMemo(() => {
     const months: { [key: string]: number } = {};
-    const now = new Date();
     
     leads.forEach(lead => {
       if (lead.dateAndTime) {
@@ -74,15 +73,15 @@ const LeadsDetailDialog = ({ open, onClose, title, leads, color }: LeadsDetailDi
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-6xl h-[85vh] p-0 flex flex-col">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <DialogTitle className={`text-2xl ${color}`}>
             {title} - Detailed Analytics ({leads.length} leads)
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6 pb-4">
+        <ScrollArea className="flex-1 px-6">
+          <div className="space-y-6 py-6">
             
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -227,4 +226,4 @@ const LeadsDetailDialog = ({ open, onClose, title, leads, color }: LeadsDetailDi
   );
 };
 
-export default LeadsDetailDialog;
+export default LeadsAnalyticsDialog;
