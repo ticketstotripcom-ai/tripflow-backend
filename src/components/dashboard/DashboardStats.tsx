@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
-import { Users, TrendingUp, CheckCircle, Clock, Flame, Target } from "lucide-react";
+import { Users, TrendingUp, CheckCircle, Flame, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import LeadsDetailDialog from "./LeadsDetailDialog";
 import HotLeadsDialog from "./HotLeadsDialog";
@@ -9,29 +9,12 @@ interface DashboardStatsProps {
   leads: SheetLead[];
 }
 
-type StatCategory = 'total' | 'new' | 'working' | 'booked' | 'hot';
+type StatCategory = 'total' | 'working' | 'booked' | 'hot';
 
 const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const [selectedCategory, setSelectedCategory] = useState<StatCategory | null>(null);
 
-  // 🆕 NEW LEADS: blank or "unfollowed"
-  const newLeads = useMemo(() =>
-    leads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      const hasData =
-        lead.travellerName?.trim() ||
-        lead.phone?.trim() ||
-        lead.tripId?.trim();
-
-      return (
-        hasData &&
-        (status === "" || status.includes("unfollowed"))
-      );
-    }),
-    [leads]
-  );
-
-  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses (excluding hot)
+  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
   const workingLeads = useMemo(() =>
     leads.filter(lead => {
       const status = (lead.status || "").toLowerCase();
@@ -65,6 +48,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const totalLeads = leads.length;
   const conversionRate = totalLeads > 0 ? ((bookedLeads.length / totalLeads) * 100).toFixed(1) : '0';
   const activeEngagement = workingLeads.length + hotLeads.length;
+  const activeEngagementPercent = totalLeads > 0 ? ((activeEngagement / totalLeads) * 100).toFixed(1) : '0';
 
   const topStats = [
     {
@@ -75,15 +59,6 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
       bgColor: "bg-primary/10",
       category: 'total' as StatCategory,
       leads: leads,
-    },
-    {
-      title: "New/Unfollowed",
-      value: newLeads.length,
-      icon: Clock,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/20",
-      category: 'new' as StatCategory,
-      leads: newLeads,
     },
     {
       title: "Working On",
@@ -114,31 +89,23 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     },
   ];
 
-  // ✅ Bottom analytics cards (NO Hot Leads here)
+  // Bottom analytics cards - Only 2 cards
   const analyticsCards = [
     {
       title: "Conversion Rate",
       value: `${conversionRate}%`,
       subtitle: `${bookedLeads.length} of ${totalLeads} leads converted`,
-      status: "Needs Focus",
-      statusColor: "text-red-600",
+      status: parseFloat(conversionRate) >= 5 ? "Good" : "Needs Focus",
+      statusColor: parseFloat(conversionRate) >= 5 ? "text-green-600" : "text-red-600",
       icon: Target,
     },
     {
       title: "Active Engagement",
-      value: `${((activeEngagement / totalLeads) * 100).toFixed(1)}%`,
+      value: `${activeEngagementPercent}%`,
       subtitle: `${activeEngagement} leads being worked on`,
-      status: "Good",
-      statusColor: "text-green-600",
+      status: parseFloat(activeEngagementPercent) >= 50 ? "Good" : "Improve",
+      statusColor: parseFloat(activeEngagementPercent) >= 50 ? "text-green-600" : "text-orange-600",
       icon: TrendingUp,
-    },
-    {
-      title: "New/Unfollowed",
-      value: newLeads.length.toString(),
-      subtitle: "Leads awaiting initial contact",
-      status: "Action Needed",
-      statusColor: "text-orange-600",
-      icon: Clock,
     },
   ];
 
@@ -151,8 +118,8 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   return (
     <>
       <div className="space-y-4">
-        {/* Top Stats Row - 5 cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* Top Stats Row - 4 cards only */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {topStats.map((stat) => {
             const Icon = stat.icon;
             return (
@@ -185,8 +152,8 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
           })}
         </div>
 
-        {/* Bottom Analytics Row - 3 cards (NO Hot Leads) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Bottom Analytics Row - 2 cards only */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {analyticsCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -210,7 +177,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         </div>
       </div>
 
-      {/* Detail Dialog for Total, New, Working, Booked */}
+      {/* Detail Dialog for Total, Working, Booked */}
       {selectedStat && selectedCategory !== 'hot' && (
         <LeadsDetailDialog
           open={!!selectedCategory}
