@@ -117,7 +117,7 @@ const AdminDashboard = () => {
 
     return (
       hasData && (status === "" ||
-      status.includes("unfollowed"))
+      status.includes("unfollowed")
     );
   }),
   [filteredLeads]
