@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
-import { Users, TrendingUp, CheckCircle, Clock, Flame } from "lucide-react";
+import { Users, TrendingUp, CheckCircle, Clock, Flame, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import LeadsDetailDialog from "./LeadsDetailDialog";
 import HotLeadsDialog from "./HotLeadsDialog";
@@ -31,7 +31,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     [leads]
   );
 
-  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses (excluding hot)
   const workingLeads = useMemo(() =>
     leads.filter(lead => {
       const status = (lead.status || "").toLowerCase();
@@ -64,8 +64,9 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
 
   const totalLeads = leads.length;
   const conversionRate = totalLeads > 0 ? ((bookedLeads.length / totalLeads) * 100).toFixed(1) : '0';
+  const activeEngagement = workingLeads.length + hotLeads.length;
 
-  const stats = [
+  const topStats = [
     {
       title: "Total Leads",
       value: totalLeads,
@@ -113,17 +114,46 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     },
   ];
 
+  // ✅ Bottom analytics cards (NO Hot Leads here)
+  const analyticsCards = [
+    {
+      title: "Conversion Rate",
+      value: `${conversionRate}%`,
+      subtitle: `${bookedLeads.length} of ${totalLeads} leads converted`,
+      status: "Needs Focus",
+      statusColor: "text-red-600",
+      icon: Target,
+    },
+    {
+      title: "Active Engagement",
+      value: `${((activeEngagement / totalLeads) * 100).toFixed(1)}%`,
+      subtitle: `${activeEngagement} leads being worked on`,
+      status: "Good",
+      statusColor: "text-green-600",
+      icon: TrendingUp,
+    },
+    {
+      title: "New/Unfollowed",
+      value: newLeads.length.toString(),
+      subtitle: "Leads awaiting initial contact",
+      status: "Action Needed",
+      statusColor: "text-orange-600",
+      icon: Clock,
+    },
+  ];
+
   const handleCardClick = (category: StatCategory) => {
     setSelectedCategory(category);
   };
 
-  const selectedStat = stats.find(s => s.category === selectedCategory);
+  const selectedStat = topStats.find(s => s.category === selectedCategory);
 
   return (
     <>
       <div className="space-y-4">
+        {/* Top Stats Row - 5 cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {stats.map((stat) => {
+          {topStats.map((stat) => {
             const Icon = stat.icon;
             return (
               <Card 
@@ -154,6 +184,30 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
             );
           })}
         </div>
+
+        {/* Bottom Analytics Row - 3 cards (NO Hot Leads) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {analyticsCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Card key={card.title}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    {card.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">{card.value}</div>
+                  <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
+                  <p className={`text-xs font-medium mt-2 ${card.statusColor}`}>
+                    {card.status}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       {/* Detail Dialog for Total, New, Working, Booked */}
@@ -167,7 +221,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         />
       )}
 
-      {/* Hot Leads List Dialog */}
+      {/* Hot Leads Grid Dialog */}
       {selectedCategory === 'hot' && (
         <HotLeadsDialog
           open={selectedCategory === 'hot'}
