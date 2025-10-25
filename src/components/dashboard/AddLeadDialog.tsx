@@ -31,6 +31,15 @@ const LEAD_STATUSES = [
 
 const HOTEL_CATEGORIES = ["Basic", "3 Star", "3 Star Plus", "4 Star", "5 Star"];
 
+// ✅ Added Meal Plan options
+const MEAL_PLANS = [
+  { value: "EPAI", label: "EPAI (No Meal)" },
+  { value: "CPAI", label: "CPAI (Only Breakfast)" },
+  { value: "MAPAI", label: "MAPAI (Breakfast and Dinner)" },
+  { value: "APAI", label: "APAI (Breakfast, Lunch and Dinner)" },
+  { value: "All Meal with High Tea", label: "All Meal with High Tea" },
+];
+
 const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
   const [formData, setFormData] = useState({
     tripId: "",
@@ -42,7 +51,7 @@ const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
     nights: "",
     pax: "",
     hotelCategory: "3 Star",
-    mealPlan: "CP",
+    mealPlan: "CPAI", // ✅ Changed default to CPAI
     status: "Unfollowed",
     remarks: "",
   });
@@ -199,12 +208,24 @@ const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
                 onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
               />
             </div>
+            {/* ✅ Changed Meal Plan to Dropdown */}
             <div className="space-y-2">
               <Label>Meal Plan</Label>
-              <Input
+              <Select
                 value={formData.mealPlan}
-                onChange={(e) => setFormData({ ...formData, mealPlan: e.target.value })}
-              />
+                onValueChange={(value) => setFormData({ ...formData, mealPlan: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEAL_PLANS.map((plan) => (
+                    <SelectItem key={plan.value} value={plan.value}>
+                      {plan.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
