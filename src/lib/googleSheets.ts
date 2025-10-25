@@ -35,6 +35,7 @@ export interface SheetLead {
   priority?: string;
   remarkHistory?: string[];
   notes?: string; // Column K
+  _rowNumber?: number; // ✅ 1. Added: Stores actual Google Sheet row number
 }
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -43,6 +44,10 @@ export class GoogleSheetsService {
   private config: GoogleSheetsConfig;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  
+  // ✅ 5. Added: Cache for leads
+  private leadsCache: { data: SheetLead[]; timestamp: number } | null = null;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor(config: GoogleSheetsConfig) {
     this.config = config;
@@ -118,6 +123,15 @@ export class GoogleSheetsService {
     return index - 1;
   }
 
+  /** 
+   * ✅ 5. Added: Clear the leads cache
+   * Call this when you know data has changed (after update, delete, append)
+   */
+  public clearLeadsCache(): void {
+    this.leadsCache = null;
+    console.log('🗑️ Leads cache cleared');
+  }
+
   /** Fetch users */
   async fetchUsers(): Promise<SheetUser[]> {
     const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
@@ -152,8 +166,19 @@ export class GoogleSheetsService {
       .filter((u) => u.email && u.password);
   }
 
-  /** Fetch leads */
-  async fetchLeads(): Promise<SheetLead[]> {
+  /** 
+   * ✅ 2. Updated: Fetch leads with caching support
+   * @param forceRefresh - If true, bypasses cache and fetches fresh data
+   */
+  async fetchLeads(forceRefresh = false): Promise<SheetLead[]> {
+    // ✅ 5. Check cache first
+    if (!forceRefresh && this.leadsCache && Date.now() - this.leadsCache.timestamp < this.CACHE_TTL) {
+      console.log('✅ Returning cached leads');
+      return this.leadsCache.data;
+    }
+
+    console.log('🔄 Fetching fresh leads from Google Sheets...');
+    
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
     const range = `${worksheetName}!A2:AZ10000`;
 
@@ -197,7 +222,7 @@ export class GoogleSheetsService {
       console.warn('Failed to fetch notes:', err);
     }
 
-    return rows
+    const leads = rows
       .map((row: any[], i: number) => ({
         tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
         dateAndTime: row[this.columnToIndex(cm.dateAndTime || 'B')] || '',
@@ -219,8 +244,21 @@ export class GoogleSheetsService {
             ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';')
             : []) || [],
         notes: notesMap[i] || '',
+        // ✅ 2. Store actual Google Sheet row number
+        // i = 0 corresponds to row 2 (since we start from A2)
+        // i = 2899 corresponds to row 2901
+        _rowNumber: i + 2,
       }))
       .filter((l) => l.travellerName && l.dateAndTime);
+
+    // ✅ 5. Cache the results
+    this.leadsCache = {
+      data: leads,
+      timestamp: Date.now(),
+    };
+
+    console.log(`✅ Fetched ${leads.length} leads and cached them`);
+    return leads;
   }
 
   /** Append new lead */
@@ -253,6 +291,9 @@ export class GoogleSheetsService {
 
     if (!res.ok) throw new Error(await res.text());
     console.log('✅ Lead appended');
+    
+    // ✅ 5. Clear cache after appending new lead
+    this.clearLeadsCache();
   }
 
   /** Parse a date from common formats into a Date object */
@@ -295,7 +336,10 @@ export class GoogleSheetsService {
     return `${mm}/${dd}/${yyyy}`;
   }
 
-  /** Update a lead by (date+traveller) or by passing the lead object itself */
+  /** 
+   * ✅ 3. Updated: Update a lead by (date+traveller) using stored row number
+   * Now uses the cached _rowNumber to update the correct row
+   */
   async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void>;
   async updateLead(lead: Pick<SheetLead, 'dateAndTime' | 'travellerName'>, updates: Partial<SheetLead>): Promise<void>;
   async updateLead(a: any, b: any, c?: any): Promise<void> {
@@ -313,35 +357,62 @@ export class GoogleSheetsService {
       updates = b || {};
     }
 
-    if (!dateAndTime || !travellerName) throw new Error('Date + Traveller Name required to update lead');
+    if (!dateAndTime || !travellerName) {
+      throw new Error('Date + Traveller Name required to update lead');
+    }
 
+    // ✅ 3. Fetch leads (will use cache if available)
     const leads = await this.fetchLeads();
 
     const targetDate = this.parseFlexibleDate(dateAndTime);
 
     const sameDay = (d1: Date | null, d2: Date | null) =>
-      !!d1 && !!d2 && d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+      !!d1 && !!d2 && 
+      d1.getFullYear() === d2.getFullYear() && 
+      d1.getMonth() === d2.getMonth() && 
+      d1.getDate() === d2.getDate();
 
-    const leadIndex = leads.findIndex((l) => {
+    // ✅ 3. Find the matching lead
+    const matchedLead = leads.find((l) => {
       const ld = this.parseFlexibleDate(l.dateAndTime);
       const dateMatch = sameDay(targetDate, ld) || String(l.dateAndTime).trim() === String(dateAndTime).trim();
       const nameMatch = String(l.travellerName).trim().toLowerCase() === String(travellerName).trim().toLowerCase();
       return dateMatch && nameMatch;
     });
 
-    if (leadIndex === -1) throw new Error('Lead not found for provided Date + Traveller Name');
+    if (!matchedLead) {
+      throw new Error(`Lead not found for Date: "${dateAndTime}" and Traveller: "${travellerName}"`);
+    }
 
-    const rowNumber = leadIndex + 2; // header = row 1
+    // ✅ 3. Use the stored row number from _rowNumber field
+    if (!matchedLead._rowNumber || matchedLead._rowNumber < 2) {
+      throw new Error('Invalid row number detected. Please refresh leads data.');
+    }
+
+    const rowNumber = matchedLead._rowNumber;
+    
+    console.log(`🔍 Updating lead:`, {
+      date: dateAndTime,
+      traveller: travellerName,
+      actualSheetRow: rowNumber,
+    });
+
     const cm = this.config.columnMappings;
     const token = await this.getAccessToken();
 
     const updateData: { range: string; values: any[][] }[] = [];
+    
     for (const [key, rawValue] of Object.entries(updates)) {
-      if (rawValue === undefined || ['tripId', 'dateAndTime', 'notes'].includes(key)) continue;
+      // Skip undefined values and internal fields
+      if (rawValue === undefined || ['tripId', 'dateAndTime', 'notes', '_rowNumber'].includes(key)) {
+        continue;
+      }
+      
       const col = cm[key as keyof typeof cm];
       if (!col) continue;
 
       let value: any = rawValue;
+      
       // Ensure dates are written as mm/dd/yyyy
       if (key === 'travelDate' && typeof value === 'string') {
         // Handle HTML date input (yyyy-mm-dd)
@@ -355,10 +426,16 @@ export class GoogleSheetsService {
         }
       }
 
-      updateData.push({ range: `${this.config.worksheetNames[0]}!${col}${rowNumber}`, values: [[value]] });
+      updateData.push({ 
+        range: `${this.config.worksheetNames[0]}!${col}${rowNumber}`, 
+        values: [[value]] 
+      });
     }
 
-    if (updateData.length === 0) return;
+    if (updateData.length === 0) {
+      console.log('⚠️ No fields to update');
+      return;
+    }
 
     const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
     const res = await fetch(batchUrl, {
@@ -372,6 +449,10 @@ export class GoogleSheetsService {
       console.error('❌ Failed to update lead in Google Sheets:', errText);
       throw new Error(errText);
     }
-    console.log('✅ Lead updated successfully in Google Sheet');
+    
+    console.log(`✅ Lead updated successfully at row ${rowNumber}`);
+    
+    // ✅ 5. Clear cache after update so next fetch gets fresh data
+    this.clearLeadsCache();
   }
 }
