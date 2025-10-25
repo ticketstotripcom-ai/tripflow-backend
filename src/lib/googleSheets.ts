@@ -1,9 +1,9 @@
-// googleSheet.ts
-// Google Sheets API integration – fixed for row targeting & travel date parsing
+// googleSheets.ts
+// Google Sheets API integration
 
 export interface GoogleSheetsConfig {
   apiKey?: string;
-  serviceAccountJson?: any;
+  serviceAccountJson?: string;
   sheetId: string;
   worksheetNames: string[];
   columnMappings: Record<string, string>;
@@ -13,196 +13,365 @@ export interface SheetUser {
   name: string;
   email: string;
   phone: string;
-  role: 'admin' | 'consultant' | 'other';
+  role: 'admin' | 'consultant';
   password: string;
 }
 
 export interface SheetLead {
-  tripId?: string;
-  dateAndTime: string; // Column B - mm/dd/yyyy (fixed)
-  travellerName: string; // Column E
-  travelDate?: string; // Column G - mm/dd/yyyy
-  consultant?: string;
-  destination?: string;
-  status?: string;
+  tripId: string;
+  dateAndTime: string; // Column B
+  consultant: string;
+  status: string;
+  travellerName: string;
+  travelDate: string; // Column G
+  travelState: string;
+  remarks: string;
+  nights: string;
+  pax: string;
+  hotelCategory: string;
+  mealPlan: string;
+  phone: string;
+  email: string;
   priority?: string;
   remarkHistory?: string[];
-  notes?: string;
-  [key: string]: any;
+  notes?: string; // Column K
 }
+
+const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 export class GoogleSheetsService {
   private config: GoogleSheetsConfig;
-  private cachedToken: string | null = null;
-  private tokenExpiry = 0;
+  private accessToken: string | null = null;
+  private tokenExpiry: number = 0;
 
   constructor(config: GoogleSheetsConfig) {
     this.config = config;
   }
 
-  /** Get JWT access token using service account */
+  /** Generate access token using Service Account JSON */
   private async getAccessToken(): Promise<string> {
-    if (this.cachedToken && Date.now() < this.tokenExpiry) return this.cachedToken;
-    const sa = this.config.serviceAccountJson;
-    if (!sa) throw new Error('Missing serviceAccountJson for write access');
+    if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
-    const header = { alg: 'RS256', typ: 'JWT' };
+    if (!this.config.serviceAccountJson) {
+      throw new Error('Service Account JSON required for write operations.');
+    }
+
+    const serviceAccount = JSON.parse(this.config.serviceAccountJson);
     const now = Math.floor(Date.now() / 1000);
+    const expiry = now + 3600;
+
+    const header = { alg: 'RS256', typ: 'JWT', kid: serviceAccount.private_key_id };
     const payload = {
-      iss: sa.client_email,
+      iss: serviceAccount.client_email,
       scope: 'https://www.googleapis.com/auth/spreadsheets',
       aud: 'https://oauth2.googleapis.com/token',
+      exp: expiry,
       iat: now,
-      exp: now + 3600,
     };
 
-    const enc = (obj: any) =>
-      btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    const toSign = `${enc(header)}.${enc(payload)}`;
+    const base64url = (str: string) =>
+      btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const headerEncoded = base64url(JSON.stringify(header));
+    const payloadEncoded = base64url(JSON.stringify(payload));
+    const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
 
-    const key = await crypto.subtle.importKey(
+    const privateKey = serviceAccount.private_key
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .replace(/\s/g, '');
+
+    const binaryKey = Uint8Array.from(atob(privateKey), (c) => c.charCodeAt(0));
+    const cryptoKey = await crypto.subtle.importKey(
       'pkcs8',
-      this.pemToArrayBuffer(sa.private_key),
+      binaryKey,
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       false,
       ['sign']
     );
-    const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(toSign));
-    const jwt = `${toSign}.${btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '')}`;
 
-    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      new TextEncoder().encode(unsignedToken)
+    );
+    const signatureBase64 = base64url(String.fromCharCode(...new Uint8Array(signature)));
+    const jwt = `${unsignedToken}.${signatureBase64}`;
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-    }).then(r => r.json());
+    });
 
-    this.cachedToken = tokenResp.access_token;
-    this.tokenExpiry = Date.now() + (tokenResp.expires_in - 60) * 1000;
-    return this.cachedToken!;
-  }
-
-  private pemToArrayBuffer(pem: string): ArrayBuffer {
-    const b64 = pem.replace(/-----.*?-----/g, '').replace(/\s+/g, '');
-    const binary = atob(b64);
-    const buf = new ArrayBuffer(binary.length);
-    const view = new Uint8Array(buf);
-    for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-    return buf;
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    this.accessToken = data.access_token;
+    this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000;
+    return this.accessToken;
   }
 
   private columnToIndex(col: string): number {
-    let idx = 0;
-    for (let i = 0; i < col.length; i++)
-      idx = idx * 26 + (col.charCodeAt(i) - 64);
-    return idx - 1;
+    let index = 0;
+    for (let i = 0; i < col.length; i++) {
+      index = index * 26 + (col.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+    }
+    return index - 1;
   }
 
-  /** Flexible date parser for mm/dd/yyyy or dd-Month-yyyy */
-  private parseFlexibleDate(input?: string): Date | null {
-    if (!input) return null;
-    const str = input.trim();
+  /** Fetch users */
+  async fetchUsers(): Promise<SheetUser[]> {
+    const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
+    const range = `${worksheetName}!A2:Z1000`;
 
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
-      const [m, d, y] = str.split('/').map(Number);
-      return new Date(y, m - 1, d);
+    let url: string;
+    let headers: Record<string, string> = {};
+    if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+    } else {
+      const token = await this.getAccessToken();
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
-    if (/^\d{1,2}-[A-Za-z]+-\d{2,4}$/.test(str)) {
-      const [d, mon, y] = str.split('-');
-      const yr = y.length === 2 ? Number('20' + y) : Number(y);
-      const monthIndex = new Date(`${mon} 1, 2000`).getMonth();
-      return new Date(yr, monthIndex, Number(d));
-    }
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
+    const data = await response.json();
+    const rows = data.values || [];
+    const cm = this.config.columnMappings;
 
-    const parsed = new Date(str);
-    return isNaN(parsed.getTime()) ? null : parsed;
+    return rows
+      .map((row: any[]) => ({
+        name: row[this.columnToIndex(cm.name || 'C')] || '',
+        email: row[this.columnToIndex(cm.email || 'D')] || '',
+        phone: row[this.columnToIndex(cm.phone || 'E')] || '',
+        role: (row[this.columnToIndex(cm.role || 'M')] || 'consultant').toLowerCase() as
+          | 'admin'
+          | 'consultant',
+        password: row[this.columnToIndex(cm.password || 'N')] || '',
+      }))
+      .filter((u) => u.email && u.password);
   }
 
-  private toMMDDYYYY(date?: string | Date | null): string {
-    const d = typeof date === 'string' ? this.parseFlexibleDate(date) : date;
-    if (!d) return '';
-    const m = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${m}/${day}/${d.getFullYear()}`;
-  }
-
-  /** Fetch all leads */
+  /** Fetch leads */
   async fetchLeads(): Promise<SheetLead[]> {
-    const sheet = this.config.worksheetNames[0];
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.config.sheetId}/values/${sheet}!A1:AZ10000?key=${this.config.apiKey}`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const rows: string[][] = json.values || [];
+    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    const range = `${worksheetName}!A2:AZ10000`;
 
-    if (rows.length <= 1) return [];
-    const dataRows = rows.slice(1);
+    let url: string;
+    let headers: Record<string, string> = {};
+    if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+    } else {
+      const token = await this.getAccessToken();
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-    return dataRows.map(row => ({
-      tripId: row[this.columnToIndex('A')],
-      dateAndTime: this.toMMDDYYYY(row[this.columnToIndex('B')]),
-      consultant: row[this.columnToIndex('C')],
-      travellerName: (row[this.columnToIndex('E')] || '').trim(),
-      travelDate: this.toMMDDYYYY(row[this.columnToIndex('G')]),
-      destination: row[this.columnToIndex('H')],
-      status: row[this.columnToIndex('I')],
-      priority: row[this.columnToIndex('J')],
-      notes: row[this.columnToIndex('K')],
-    })).filter(l => l.travellerName && l.dateAndTime);
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`Failed to fetch leads: ${response.statusText}`);
+    const data = await response.json();
+    const rows = data.values || [];
+    const cm = this.config.columnMappings;
+
+    // Optional notes
+    let notesMap: Record<number, string> = {};
+    try {
+      const notesUrl = this.config.apiKey
+        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+            worksheetName
+          )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
+        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
+            worksheetName
+          )}!K2:K10000&fields=sheets.data.rowData.values.note`;
+
+      const notesHeaders = this.config.apiKey ? {} : { Authorization: `Bearer ${await this.getAccessToken()}` };
+      const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
+      if (notesResponse.ok) {
+        const notesData = await notesResponse.json();
+        const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
+        rowData.forEach((row: any, index: number) => {
+          if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to fetch notes:', err);
+    }
+
+    return rows
+      .map((row: any[], i: number) => ({
+        tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
+        dateAndTime: row[this.columnToIndex(cm.dateAndTime || 'B')] || '',
+        consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
+        status: row[this.columnToIndex(cm.status || 'D')] || '',
+        travellerName: row[this.columnToIndex(cm.travellerName || 'E')] || '',
+        travelDate: row[this.columnToIndex(cm.travelDate || 'G')] || '',
+        travelState: row[this.columnToIndex(cm.travelState || 'H')] || '',
+        remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
+        nights: row[this.columnToIndex(cm.nights || 'L')] || '',
+        pax: row[this.columnToIndex(cm.pax || 'M')] || '',
+        hotelCategory: row[this.columnToIndex(cm.hotelCategory || 'N')] || '',
+        mealPlan: row[this.columnToIndex(cm.mealPlan || 'O')] || '',
+        phone: row[this.columnToIndex(cm.phone || 'P')] || '',
+        email: row[this.columnToIndex(cm.email || 'Q')] || '',
+        priority: row[this.columnToIndex(cm.priority || '')] || '',
+        remarkHistory:
+          (cm.remarkHistory
+            ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';')
+            : []) || [],
+        notes: notesMap[i] || '',
+      }))
+      .filter((l) => l.travellerName && l.dateAndTime);
   }
 
-  /** Update a lead using Column B (Date) + Column E (Traveller Name) */
-  async updateLead(
-    dateAndTime: string,
-    travellerName: string,
-    updates: Partial<SheetLead>
-  ): Promise<void> {
-    const sheet = this.config.worksheetNames[0];
+  /** Append new lead */
+  async appendLead(lead: Partial<SheetLead>): Promise<void> {
+    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    const range = `${worksheetName}!A:Z`;
     const token = await this.getAccessToken();
+    const cm = this.config.columnMappings;
 
-    // fetch all rows including header to get exact indices
-    const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${this.config.sheetId}/values/${sheet}!A1:AZ10000?majorDimension=ROWS`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const { values } = await resp.json();
-    if (!values) throw new Error('No data found');
+    const row: any[] = [];
+    const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
 
-    const targetRow = values.findIndex((row: string[]) => {
-      const sheetDate = this.toMMDDYYYY(row[1]);
-      const leadDate = this.toMMDDYYYY(dateAndTime);
-      const sheetTraveller = (row[4] || '').trim().toLowerCase();
-      const leadTraveller = travellerName.trim().toLowerCase();
-      return sheetDate === leadDate && sheetTraveller === leadTraveller;
+    for (let i = 0; i <= maxCol; i++) row[i] = '';
+
+    for (const [key, col] of Object.entries(cm)) {
+      if (!col) continue;
+      const idx = this.columnToIndex(col);
+      if (key in lead && lead[key as keyof SheetLead] !== undefined) {
+        const value = lead[key as keyof SheetLead];
+        row[idx] = Array.isArray(value) ? value.join('; ') : value;
+      }
+    }
+
+    const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: [row] }),
     });
 
-    if (targetRow === -1) throw new Error('Lead not found in sheet');
-    const actualRow = targetRow + 1; // exact row number in sheet
+    if (!res.ok) throw new Error(await res.text());
+    console.log('✅ Lead appended');
+  }
 
-    const data: { range: string; values: any[][] }[] = [];
-    for (const [key, value] of Object.entries(updates)) {
-      const col = this.config.columnMappings[key];
-      if (!col) continue;
-      const val = key === 'travelDate' ? this.toMMDDYYYY(value as any) : value;
-      data.push({
-        range: `${sheet}!${col}${actualRow}`,
-        values: [[val ?? '']],
-      });
+  /** Parse a date from common formats into a Date object */
+  private parseFlexibleDate(input: string): Date | null {
+    if (!input) return null;
+    const s = String(input).trim();
+
+    // mm/dd/yyyy
+    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m1) {
+      const mm = Number(m1[1]);
+      const dd = Number(m1[2]);
+      let yy = Number(m1[3]);
+      if (yy < 100) yy = 2000 + yy;
+      const d = new Date(yy, mm - 1, dd);
+      return isNaN(d.getTime()) ? null : d;
     }
 
-    if (data.length === 0) return;
+    // dd-Month-yy or dd-Month-yyyy (e.g., 03-April-25)
+    const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
+    if (m2) {
+      const dd = Number(m2[1]);
+      const monthName = m2[2];
+      let yy = Number(m2[3]);
+      if (yy < 100) yy = 2000 + yy;
+      const monthIndex = new Date(`${monthName} 1, 2000`).getMonth();
+      if (isNaN(monthIndex)) return null;
+      const d = new Date(yy, monthIndex, dd);
+      return isNaN(d.getTime()) ? null : d;
+    }
 
-    const batchBody = { valueInputOption: 'USER_ENTERED', data };
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${this.config.sheetId}/values:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(batchBody),
+    return null;
+  }
+
+  /** Format Date to mm/dd/yyyy */
+  private toMMDDYYYY(date: Date): string {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = String(date.getFullYear());
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  /** Update a lead by (date+traveller) or by passing the lead object itself */
+  async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void>;
+  async updateLead(lead: Pick<SheetLead, 'dateAndTime' | 'travellerName'>, updates: Partial<SheetLead>): Promise<void>;
+  async updateLead(a: any, b: any, c?: any): Promise<void> {
+    let dateAndTime: string;
+    let travellerName: string;
+    let updates: Partial<SheetLead>;
+
+    if (typeof a === 'string') {
+      dateAndTime = a;
+      travellerName = b;
+      updates = c || {};
+    } else {
+      dateAndTime = a?.dateAndTime;
+      travellerName = a?.travellerName;
+      updates = b || {};
+    }
+
+    if (!dateAndTime || !travellerName) throw new Error('Date + Traveller Name required to update lead');
+
+    const leads = await this.fetchLeads();
+
+    const targetDate = this.parseFlexibleDate(dateAndTime);
+
+    const sameDay = (d1: Date | null, d2: Date | null) =>
+      !!d1 && !!d2 && d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+
+    const leadIndex = leads.findIndex((l) => {
+      const ld = this.parseFlexibleDate(l.dateAndTime);
+      const dateMatch = sameDay(targetDate, ld) || String(l.dateAndTime).trim() === String(dateAndTime).trim();
+      const nameMatch = String(l.travellerName).trim().toLowerCase() === String(travellerName).trim().toLowerCase();
+      return dateMatch && nameMatch;
+    });
+
+    if (leadIndex === -1) throw new Error('Lead not found for provided Date + Traveller Name');
+
+    const rowNumber = leadIndex + 2; // header = row 1
+    const cm = this.config.columnMappings;
+    const token = await this.getAccessToken();
+
+    const updateData: { range: string; values: any[][] }[] = [];
+    for (const [key, rawValue] of Object.entries(updates)) {
+      if (rawValue === undefined || ['tripId', 'dateAndTime', 'notes'].includes(key)) continue;
+      const col = cm[key as keyof typeof cm];
+      if (!col) continue;
+
+      let value: any = rawValue;
+      // Ensure dates are written as mm/dd/yyyy
+      if (key === 'travelDate' && typeof value === 'string') {
+        // Handle HTML date input (yyyy-mm-dd)
+        const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (iso) {
+          const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+          value = this.toMMDDYYYY(d);
+        } else {
+          const d = this.parseFlexibleDate(value);
+          if (d) value = this.toMMDDYYYY(d);
+        }
       }
-    );
-    console.log(`✅ Lead updated at row ${actualRow}`);
+
+      updateData.push({ range: `${this.config.worksheetNames[0]}!${col}${rowNumber}`, values: [[value]] });
+    }
+
+    if (updateData.length === 0) return;
+
+    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+    const res = await fetch(batchUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('❌ Failed to update lead in Google Sheets:', errText);
+      throw new Error(errText);
+    }
+    console.log('✅ Lead updated successfully in Google Sheet');
   }
 }
