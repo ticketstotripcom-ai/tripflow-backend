@@ -16,6 +16,59 @@ interface LeadCardProps {
   onSwipeRight?: (lead: SheetLead) => void;
 }
 
+/**
+ * ✅ Convert mm/dd/yyyy to "15 November 2025" format
+ */
+const formatTravelDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  try {
+    const s = String(dateStr).trim();
+    
+    // Parse mm/dd/yyyy format
+    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m1) {
+      const mm = Number(m1[1]);
+      const dd = Number(m1[2]);
+      let yyyy = Number(m1[3]);
+      
+      // Convert 2-digit year to 4-digit
+      if (yyyy < 100) {
+        yyyy = yyyy < 50 ? 2000 + yyyy : 1900 + yyyy;
+      }
+      
+      // Create date object
+      const date = new Date(yyyy, mm - 1, dd);
+      
+      if (isNaN(date.getTime())) {
+        return dateStr; // Invalid date, return as-is
+      }
+      
+      // Format as "15 November 2025"
+      return date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+    
+    // Try parsing with Date constructor as fallback
+    const date = new Date(s);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+    
+    return dateStr; // Fallback: return original
+  } catch (e) {
+    console.warn('Failed to format date:', dateStr, e);
+    return dateStr;
+  }
+};
+
 const getCardBackgroundByStatus = (status: string, priority: string) => {
   const lowerStatus = status.toLowerCase();
   const lowerPriority = priority?.toLowerCase() || 'medium';
@@ -185,7 +238,8 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           {lead.travelDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>{new Date(lead.travelDate).toLocaleDateString()}</span>
+              {/* ✅ Format date as "15 November 2025" */}
+              <span>{formatTravelDate(lead.travelDate)}</span>
             </div>
           )}
           
