@@ -12,7 +12,6 @@ import AssignLeadDialog from "./AssignLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
-import KeyMetricsCards from "./KeyMetricsCards";
 import { useLocation } from "react-router-dom";
 
 const AdminDashboard = () => {
@@ -107,46 +106,45 @@ const AdminDashboard = () => {
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
 
   // 🆕 NEW LEADS: blank or "unfollowed"
-const newLeads = useMemo(() =>
-  filteredLeads.filter(lead => {
-    const status = (lead.status || "").toLowerCase();
-    const hasData =
-      lead.travellerName?.trim() ||
-      lead.phone?.trim() ||
-      lead.tripId?.trim();
+  const newLeads = useMemo(() =>
+    filteredLeads.filter(lead => {
+      const status = (lead.status || "").toLowerCase();
+      const hasData =
+        lead.travellerName?.trim() ||
+        lead.phone?.trim() ||
+        lead.tripId?.trim();
 
-    return (
-      hasData &&
-      (status === "" || status.includes("unfollowed"))
-    );
-  }),
-  [filteredLeads]
-);
+      return (
+        hasData &&
+        (status === "" || status.includes("unfollowed"))
+      );
+    }),
+    [filteredLeads]
+  );
 
-// ⚙️ WORKING LEADS: follow-up + all ongoing statuses
-const workingLeads = useMemo(() =>
-  filteredLeads.filter(lead => {
-    const status = (lead.status || "").toLowerCase();
-    return (
-      status.includes("follow-up") ||
-      status.includes("working") ||
-      status.includes("whatsapp") ||
-      status.includes("proposal") ||
-      status.includes("negotiations") ||
-      status.includes("hot")
-    );
-  }),
-  [filteredLeads]
-);
+  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+  const workingLeads = useMemo(() =>
+    filteredLeads.filter(lead => {
+      const status = (lead.status || "").toLowerCase();
+      return (
+        status.includes("follow-up") ||
+        status.includes("working") ||
+        status.includes("whatsapp") ||
+        status.includes("proposal") ||
+        status.includes("negotiations") ||
+        status.includes("hot")
+      );
+    }),
+    [filteredLeads]
+  );
 
-// ✅ BOOKED LEADS: booked with us
-const bookedLeads = useMemo(() =>
-  filteredLeads.filter(lead =>
-    (lead.status || "").toLowerCase().includes("booked with us")
-  ),
-  [filteredLeads]
-);
-
+  // ✅ BOOKED LEADS: booked with us
+  const bookedLeads = useMemo(() =>
+    filteredLeads.filter(lead =>
+      (lead.status || "").toLowerCase().includes("booked with us")
+    ),
+    [filteredLeads]
+  );
 
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
@@ -254,8 +252,8 @@ const bookedLeads = useMemo(() =>
 
       {isAnalyticsOnly ? (
         <div className="space-y-6">
+          {/* ✅ ONLY DashboardStats - Removed KeyMetricsCards */}
           <DashboardStats leads={leads} />
-          <KeyMetricsCards leads={leads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
