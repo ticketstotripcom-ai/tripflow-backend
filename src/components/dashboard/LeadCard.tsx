@@ -17,42 +17,52 @@ interface LeadCardProps {
 }
 
 /**
- * ✅ Convert mm/dd/yyyy to "15 November 2025" format
+ * ✅ FIXED: Convert mm/dd/yyyy to "6 November 2025" format
  */
 const formatTravelDate = (dateStr: string): string => {
   if (!dateStr) return '';
   
   try {
+    // Remove any whitespace
     const s = String(dateStr).trim();
+    console.log('📅 Formatting date:', s); // Debug log
     
-    // Parse mm/dd/yyyy format
-    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (m1) {
-      const mm = Number(m1[1]);
-      const dd = Number(m1[2]);
-      let yyyy = Number(m1[3]);
+    // Parse mm/dd/yyyy or m/d/yyyy format
+    const match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (match) {
+      const mm = Number(match[1]);  // month
+      const dd = Number(match[2]);  // day
+      let yyyy = Number(match[3]);  // year
       
       // Convert 2-digit year to 4-digit
       if (yyyy < 100) {
         yyyy = yyyy < 50 ? 2000 + yyyy : 1900 + yyyy;
       }
       
-      // Create date object
+      console.log('📅 Parsed:', { mm, dd, yyyy });
+      
+      // Create date object (month is 0-indexed in JavaScript)
       const date = new Date(yyyy, mm - 1, dd);
       
+      // Check if date is valid
       if (isNaN(date.getTime())) {
-        return dateStr; // Invalid date, return as-is
+        console.warn('⚠️ Invalid date:', s);
+        return s;
       }
       
-      // Format as "15 November 2025"
-      return date.toLocaleDateString('en-GB', {
+      // Format as "6 November 2025"
+      const formatted = date.toLocaleDateString('en-GB', {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
       });
+      
+      console.log('✅ Formatted:', formatted);
+      return formatted;
     }
     
-    // Try parsing with Date constructor as fallback
+    // If regex doesn't match, try Date constructor
+    console.warn('⚠️ Date format not recognized, trying Date constructor:', s);
     const date = new Date(s);
     if (!isNaN(date.getTime())) {
       return date.toLocaleDateString('en-GB', {
@@ -62,9 +72,11 @@ const formatTravelDate = (dateStr: string): string => {
       });
     }
     
-    return dateStr; // Fallback: return original
+    // Fallback: return original
+    console.warn('❌ Could not format date:', s);
+    return s;
   } catch (e) {
-    console.warn('Failed to format date:', dateStr, e);
+    console.error('❌ Error formatting date:', dateStr, e);
     return dateStr;
   }
 };
@@ -86,7 +98,6 @@ const getCardBackgroundByStatus = (status: string, priority: string) => {
     return 'bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-purple-200 dark:border-purple-800';
   }
   
-  // Priority-based for new/unfollowed
   if (lowerPriority === 'high') {
     return 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-red-200 dark:border-red-800';
   }
@@ -190,7 +201,6 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           transition: swipeOffset === 0 ? 'transform 0.3s ease-out' : 'none',
         }}
       >
-        {/* Swipe indicators */}
         {swipeOffset < -50 && (
           <div className="absolute inset-y-0 right-0 flex items-center justify-center px-4 bg-green-500 text-white rounded-r-lg z-0">
             <CheckCircle className="h-6 w-6" />
@@ -202,7 +212,6 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           </div>
         )}
         
-        {/* Status badges */}
         {isConverted && (
           <div className="absolute top-2 right-2 z-10 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium animate-fade-in">
             ✓ Converted!
@@ -238,8 +247,8 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           {lead.travelDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              {/* ✅ Format date as "15 November 2025" */}
-              <span>{formatTravelDate(lead.travelDate)}</span>
+              {/* ✅ CRITICAL: Use formatTravelDate function */}
+              <span className="font-medium">{formatTravelDate(lead.travelDate)}</span>
             </div>
           )}
           
