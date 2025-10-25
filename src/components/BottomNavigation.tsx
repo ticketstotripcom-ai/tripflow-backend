@@ -15,14 +15,14 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   };
 
   const handleHome = () => {
-    navigate('/');
+    navigate('/dashboard?view=leads');
   };
 
   const handleDashboard = () => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate('/dashboard');
+      navigate('/dashboard?view=analytics');
     }
   };
 

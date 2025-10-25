@@ -70,7 +70,7 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
         columnMappings: credentials.columnMappings
       });
 
-      await sheetsService.updateLead(lead.tripId, {
+      await sheetsService.updateLead(lead, {
         consultant: selectedConsultant,
       });
 

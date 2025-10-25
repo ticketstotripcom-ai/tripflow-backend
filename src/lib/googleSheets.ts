@@ -255,42 +255,106 @@ export class GoogleSheetsService {
     console.log('✅ Lead appended');
   }
 
-  /** Normalize mm/dd/yyyy dates to "dd-MMMM-yy" */
-  private normalizeDate(dateStr: string): string {
-    const parts = dateStr.split('/');
-    if (parts.length !== 3) return dateStr;
-    const [month, day, year] = parts.map(Number);
-    if (!month || !day || !year) return dateStr;
+  /** Parse a date from common formats into a Date object */
+  private parseFlexibleDate(input: string): Date | null {
+    if (!input) return null;
+    const s = String(input).trim();
 
-    const date = new Date(year, month - 1, day);
-    const dayStr = day.toString().padStart(2, '0');
-    const monthStr = date.toLocaleString('default', { month: 'long' });
-    const yearStr = year.toString().slice(-2);
+    // mm/dd/yyyy
+    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m1) {
+      const mm = Number(m1[1]);
+      const dd = Number(m1[2]);
+      let yy = Number(m1[3]);
+      if (yy < 100) yy = 2000 + yy;
+      const d = new Date(yy, mm - 1, dd);
+      return isNaN(d.getTime()) ? null : d;
+    }
 
-    return `${dayStr}-${monthStr}-${yearStr}`;
+    // dd-Month-yy or dd-Month-yyyy (e.g., 03-April-25)
+    const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
+    if (m2) {
+      const dd = Number(m2[1]);
+      const monthName = m2[2];
+      let yy = Number(m2[3]);
+      if (yy < 100) yy = 2000 + yy;
+      const monthIndex = new Date(`${monthName} 1, 2000`).getMonth();
+      if (isNaN(monthIndex)) return null;
+      const d = new Date(yy, monthIndex, dd);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    return null;
   }
 
-  /** Update lead using Date + Traveller Name */
-  async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void> {
+  /** Format Date to mm/dd/yyyy */
+  private toMMDDYYYY(date: Date): string {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = String(date.getFullYear());
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  /** Update a lead by (date+traveller) or by passing the lead object itself */
+  async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void>;
+  async updateLead(lead: Pick<SheetLead, 'dateAndTime' | 'travellerName'>, updates: Partial<SheetLead>): Promise<void>;
+  async updateLead(a: any, b: any, c?: any): Promise<void> {
+    let dateAndTime: string;
+    let travellerName: string;
+    let updates: Partial<SheetLead>;
+
+    if (typeof a === 'string') {
+      dateAndTime = a;
+      travellerName = b;
+      updates = c || {};
+    } else {
+      dateAndTime = a?.dateAndTime;
+      travellerName = a?.travellerName;
+      updates = b || {};
+    }
+
     if (!dateAndTime || !travellerName) throw new Error('Date + Traveller Name required to update lead');
 
     const leads = await this.fetchLeads();
-    const normalizedDate = this.normalizeDate(dateAndTime);
 
-    const leadIndex = leads.findIndex(
-      (l) => this.normalizeDate(l.dateAndTime) === normalizedDate && l.travellerName === travellerName
-    );
-    if (leadIndex === -1) throw new Error('Lead not found');
+    const targetDate = this.parseFlexibleDate(dateAndTime);
+
+    const sameDay = (d1: Date | null, d2: Date | null) =>
+      !!d1 && !!d2 && d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+
+    const leadIndex = leads.findIndex((l) => {
+      const ld = this.parseFlexibleDate(l.dateAndTime);
+      const dateMatch = sameDay(targetDate, ld) || String(l.dateAndTime).trim() === String(dateAndTime).trim();
+      const nameMatch = String(l.travellerName).trim().toLowerCase() === String(travellerName).trim().toLowerCase();
+      return dateMatch && nameMatch;
+    });
+
+    if (leadIndex === -1) throw new Error('Lead not found for provided Date + Traveller Name');
 
     const rowNumber = leadIndex + 2; // header = row 1
     const cm = this.config.columnMappings;
     const token = await this.getAccessToken();
 
     const updateData: { range: string; values: any[][] }[] = [];
-    for (const [key, value] of Object.entries(updates)) {
-      if (value === undefined || ['tripId', 'dateAndTime', 'notes'].includes(key)) continue;
+    for (const [key, rawValue] of Object.entries(updates)) {
+      if (rawValue === undefined || ['tripId', 'dateAndTime', 'notes'].includes(key)) continue;
       const col = cm[key as keyof typeof cm];
       if (!col) continue;
+
+      let value: any = rawValue;
+      // Ensure dates are written as mm/dd/yyyy
+      if (key === 'travelDate' && typeof value === 'string') {
+        // Handle HTML date input (yyyy-mm-dd)
+        const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (iso) {
+          const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+          value = this.toMMDDYYYY(d);
+        } else {
+          const d = this.parseFlexibleDate(value);
+          if (d) value = this.toMMDDYYYY(d);
+        }
+      }
+
       updateData.push({ range: `${this.config.worksheetNames[0]}!${col}${rowNumber}`, values: [[value]] });
     }
 
@@ -303,7 +367,11 @@ export class GoogleSheetsService {
       body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
     });
 
-    if (!res.ok) throw new Error(await res.text());
-    console.log('✅ Lead updated successfully in Sheet');
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('❌ Failed to update lead in Google Sheets:', errText);
+      throw new Error(errText);
+    }
+    console.log('✅ Lead updated successfully in Google Sheet');
   }
 }

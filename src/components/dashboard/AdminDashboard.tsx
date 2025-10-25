@@ -13,8 +13,12 @@ import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
 import KeyMetricsCards from "./KeyMetricsCards";
+import { useLocation } from "react-router-dom";
 
 const AdminDashboard = () => {
+  const location = useLocation();
+  const viewParam = new URLSearchParams(location.search).get('view');
+  const isAnalyticsOnly = viewParam === 'analytics';
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
@@ -25,7 +29,7 @@ const AdminDashboard = () => {
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
   const [dateFilter, setDateFilter] = useState("");
   const [consultantFilter, setConsultantFilter] = useState("All Consultants");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(isAnalyticsOnly ? "dashboard" : "new");
   const { toast } = useToast();
   const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
@@ -95,7 +99,7 @@ const AdminDashboard = () => {
       
       const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
       const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.date === dateFilter;
+      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
       const matchesConsultant = consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
       
       return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesConsultant;
@@ -139,7 +143,7 @@ const AdminDashboard = () => {
         columnMappings: credentials.columnMappings
       });
 
-      await sheetsService.updateLead(lead.tripId, { status: 'Booked With Us' });
+      await sheetsService.updateLead(lead, { status: 'Converted' });
       toast({
         title: "Lead Converted!",
         description: `${lead.travellerName} marked as booked.`,
@@ -230,39 +234,38 @@ const AdminDashboard = () => {
         showConsultantFilter={true}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="dashboard">
-            Dashboard ({leads.length})
-          </TabsTrigger>
-          <TabsTrigger value="new">
-            New Leads ({newLeads.length})
-          </TabsTrigger>
-          <TabsTrigger value="working">
-            Working ({workingLeads.length})
-          </TabsTrigger>
-          <TabsTrigger value="booked">
-            Booked ({bookedLeads.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="dashboard" className="space-y-6">
+      {isAnalyticsOnly ? (
+        <div className="space-y-6">
           <DashboardStats leads={leads} />
-          <KeyMetricsCards leads={filteredLeads} />
-        </TabsContent>
+          <KeyMetricsCards leads={leads} />
+        </div>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="new">
+              New Leads ({newLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="working">
+              Working ({workingLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="booked">
+              Booked ({bookedLeads.length})
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="new">
-          {renderLeadGrid(newLeads)}
-        </TabsContent>
+          <TabsContent value="new">
+            {renderLeadGrid(newLeads)}
+          </TabsContent>
 
-        <TabsContent value="working">
-          {renderLeadGrid(workingLeads)}
-        </TabsContent>
+          <TabsContent value="working">
+            {renderLeadGrid(workingLeads)}
+          </TabsContent>
 
-        <TabsContent value="booked">
-          {renderLeadGrid(bookedLeads)}
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="booked">
+            {renderLeadGrid(bookedLeads)}
+          </TabsContent>
+        </Tabs>
+      )}
 
       {selectedLead && (
         <LeadDetailsDialog

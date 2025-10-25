@@ -72,7 +72,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       });
 
       console.log('🚀 Calling updateLead...');
-      await sheetsService.updateLead(lead.tripId, formData);
+      await sheetsService.updateLead(lead, formData);
       console.log('✅ updateLead completed');
 
       toast({
@@ -111,7 +111,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input value={formData.date} readOnly className="bg-muted" />
+              <Input value={formData.dateAndTime} readOnly className="bg-muted" />
             </div>
           </div>
 

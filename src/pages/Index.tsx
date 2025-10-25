@@ -10,7 +10,7 @@ const Index = () => {
   useEffect(() => {
     // Auto-redirect to dashboard if already authenticated
     if (authService.isAuthenticated()) {
-      navigate("/dashboard", { replace: true });
+      navigate("/dashboard?view=leads", { replace: true });
     }
   }, [navigate]);
 
