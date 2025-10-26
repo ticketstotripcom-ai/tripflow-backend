@@ -119,13 +119,13 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle p-6 pt-20">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-subtle p-3 sm:p-6 pt-20 pb-24">
+      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
             Admin Settings
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-2">
             Configure Google Sheets integration (stored securely on device)
           </p>
         </div>

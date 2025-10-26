@@ -202,9 +202,9 @@ const ConsultantDashboard = () => {
     }
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {leadsToRender.map((lead, index) => (
-          <LeadCard 
+          <LeadCard
             key={`${lead.tripId}-${index}`} 
             lead={lead} 
             onClick={() => setSelectedLead(lead)}
@@ -217,20 +217,20 @@ const ConsultantDashboard = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">My Leads</h2>
-          <p className="text-muted-foreground">Manage your assigned leads</p>
+          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">My Leads</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage your assigned leads</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setShowAddDialog(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Lead
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
+          <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Add Lead</span>
           </Button>
-          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-2" disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </Button>
         </div>
       </div>

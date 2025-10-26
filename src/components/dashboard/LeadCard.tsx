@@ -224,45 +224,44 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
         )}
 
       <Card 
-        className={`p-4 cursor-pointer hover:shadow-glow hover:scale-[1.02] transition-all duration-300 ${cardBg} animate-fade-in border-2 relative z-10`}
+        className={`p-3 sm:p-4 cursor-pointer hover:shadow-glow hover:scale-[1.02] transition-all duration-300 ${cardBg} animate-fade-in border-2 relative z-10`}
         onClick={onClick}
       >
-      <div className="space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <h3 className="font-bold text-lg">{lead.travellerName}</h3>
-            <p className="text-sm text-muted-foreground">{lead.tripId}</p>
+      <div className="space-y-2 sm:space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-base sm:text-lg truncate">{lead.travellerName}</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground truncate">{lead.tripId}</p>
           </div>
-          <Badge className={`${getStatusColor(lead.status)} text-white`}>
+          <Badge className={`${getStatusColor(lead.status)} text-white text-xs shrink-0`}>
             {lead.status}
           </Badge>
         </div>
 
-        <div className="space-y-2 text-sm">
+        <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
-            <MapPin className="h-4 w-4" />
-            <span>{lead.travelState}</span>
+            <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+            <span className="truncate">{lead.travelState}</span>
           </div>
           
           {lead.travelDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              {/* ✅ CRITICAL: Use formatTravelDate function */}
-              <span className="font-medium">{formatTravelDate(lead.travelDate)}</span>
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+              <span className="font-medium truncate text-xs sm:text-sm">{formatTravelDate(lead.travelDate)}</span>
             </div>
           )}
           
-          <div className="flex items-center gap-4 text-muted-foreground">
+          <div className="flex items-center gap-3 sm:gap-4 text-muted-foreground">
             {lead.nights && (
               <div className="flex items-center gap-1">
-                <Moon className="h-4 w-4" />
-                <span>{lead.nights}N</span>
+                <Moon className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="text-xs sm:text-sm">{lead.nights}N</span>
               </div>
             )}
             {lead.pax && (
               <div className="flex items-center gap-1">
-                <Users className="h-4 w-4" />
-                <span>{lead.pax}</span>
+                <Users className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="text-xs sm:text-sm">{lead.pax}</span>
               </div>
             )}
           </div>
@@ -303,33 +302,33 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           )}
         </div>
 
-        <div className="flex gap-2 pt-2 border-t">
+        <div className="flex gap-1 sm:gap-2 pt-2 border-t">
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-2"
+            className="flex-1 gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0"
             onClick={handleCall}
           >
-            <Phone className="h-4 w-4" />
-            Call
+            <Phone className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+            <span className="hidden xs:inline">Call</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-2"
+            className="flex-1 gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0"
             onClick={handleEmail}
           >
-            <Mail className="h-4 w-4" />
-            Email
+            <Mail className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+            <span className="hidden xs:inline">Email</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-2"
+            className="flex-1 gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0"
             onClick={handleWhatsApp}
           >
-            <MessageCircle className="h-4 w-4" />
-            WhatsApp
+            <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+            <span className="hidden xs:inline">WhatsApp</span>
           </Button>
         </div>
       </div>
