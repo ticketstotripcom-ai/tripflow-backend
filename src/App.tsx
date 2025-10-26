@@ -12,7 +12,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import GlobalNavigation from "./components/GlobalNavigation";
+//import GlobalNavigation from "./components/GlobalNavigation";
 
 const queryClient = new QueryClient();
 
