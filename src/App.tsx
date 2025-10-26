@@ -31,7 +31,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           
-          <div className="pt-14">
+          <div>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
