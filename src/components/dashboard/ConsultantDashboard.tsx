@@ -13,6 +13,7 @@ import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
 import { useLocation } from "react-router-dom";
+import { stateManager } from "@/lib/stateManager";
 
 const ConsultantDashboard = () => {
   const location = useLocation();
@@ -22,17 +23,37 @@ const ConsultantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All Statuses");
-  const [priorityFilter, setPriorityFilter] = useState("All Priorities");
-  const [dateFilter, setDateFilter] = useState("");
-  const [activeTab, setActiveTab] = useState(isAnalyticsOnly ? "dashboard" : "new");
+  const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
+  const savedFilters = stateManager.getFilters();
+  const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
+  const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
+  const [dateFilter, setDateFilter] = useState(savedFilters.dateFilter);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (isAnalyticsOnly) return "dashboard";
+    const saved = stateManager.getActiveTab();
+    return saved || "new";
+  });
   const { toast } = useToast();
   const session = authService.getSession();
   const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
-  const fetchLeads = async (silent = false) => {
+  const fetchLeads = async (silent = false, forceRefresh = false) => {
     try {
+      // Check cache first unless force refresh
+      if (!forceRefresh) {
+        const cached = stateManager.getCachedLeads();
+        if (cached.isValid) {
+          const myLeads = cached.leads.filter(lead => 
+            lead.consultant && 
+            lead.consultant.toLowerCase().includes(session?.user.name.toLowerCase() || '')
+          );
+          setLeads(myLeads);
+          if (!silent) setLoading(false);
+          console.log('Using cached leads');
+          return;
+        }
+      }
+
       if (!silent) setLoading(true);
       
       const credentials = await secureStorage.getCredentials();
@@ -47,6 +68,7 @@ const ConsultantDashboard = () => {
       });
 
       const data = await sheetsService.fetchLeads();
+      stateManager.setCachedLeads(data);
       
       // Filter leads assigned to this consultant
       const myLeads = data.filter(lead => 
@@ -206,22 +228,34 @@ const ConsultantDashboard = () => {
             <Plus className="h-4 w-4" />
             Add Lead
           </Button>
-          <Button onClick={() => fetchLeads()} variant="outline" className="gap-2" disabled={loading}>
+          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-2" disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
       </div>
 
-      <SearchBar value={searchQuery} onChange={setSearchQuery} />
+      <SearchBar value={searchQuery} onChange={(query) => {
+        setSearchQuery(query);
+        stateManager.setSearchQuery(query);
+      }} />
 
       <LeadFilters
         statusFilter={statusFilter}
         priorityFilter={priorityFilter}
         dateFilter={dateFilter}
-        onStatusChange={setStatusFilter}
-        onPriorityChange={setPriorityFilter}
-        onDateFilterChange={setDateFilter}
+        onStatusChange={(val) => {
+          setStatusFilter(val);
+          stateManager.setFilters({ statusFilter: val });
+        }}
+        onPriorityChange={(val) => {
+          setPriorityFilter(val);
+          stateManager.setFilters({ priorityFilter: val });
+        }}
+        onDateFilterChange={(val) => {
+          setDateFilter(val);
+          stateManager.setFilters({ dateFilter: val });
+        }}
       />
 
       {isAnalyticsOnly ? (
@@ -229,7 +263,10 @@ const ConsultantDashboard = () => {
           <DashboardStats leads={leads} />
         </div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(tab) => {
+          setActiveTab(tab);
+          stateManager.setActiveTab(tab);
+        }} className="space-y-4">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="new">
               New Leads ({newLeads.length})
