@@ -15,7 +15,7 @@ const Index = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4 pt-20">
+    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4>
       <div className="text-center space-y-8 max-w-2xl animate-fade-in">
         <div className="inline-flex items-center gap-3 mb-4">
           <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-glow">
