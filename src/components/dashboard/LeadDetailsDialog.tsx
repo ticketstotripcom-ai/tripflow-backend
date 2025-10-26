@@ -43,7 +43,7 @@ const LEAD_STATUSES = [
 const HOTEL_CATEGORIES = ["Basic", "3 Star", "3 Star Plus", "4 Star", "5 Star"];
 
 /**
- * Convert mm/dd/yyyy (Google Sheets) → dd/mm/yyyy (Display)
+ * ✅ Convert mm/dd/yyyy (Google Sheets) → dd/mm/yyyy (Display)
  */
 const convertToDisplayDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -73,7 +73,7 @@ const convertToDisplayDate = (dateStr: string): string => {
 };
 
 /**
- * Convert dd/mm/yyyy (Display) → mm/dd/yyyy (Google Sheets)
+ * ✅ Convert dd/mm/yyyy (Display) → mm/dd/yyyy (Google Sheets)
  */
 const convertToSheetDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -100,7 +100,7 @@ const convertToSheetDate = (dateStr: string): string => {
 };
 
 /**
- * Validate dd/mm/yyyy format
+ * ✅ Validate dd/mm/yyyy format
  */
 const isValidDateFormat = (dateStr: string): boolean => {
   if (!dateStr) return true; // Empty is valid
@@ -123,7 +123,7 @@ const isValidDateFormat = (dateStr: string): boolean => {
 };
 
 const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogProps) => {
-  // Convert travel date from mm/dd/yyyy to dd/mm/yyyy for display
+  // ✅ Convert travel date from mm/dd/yyyy to dd/mm/yyyy for display
   const [formData, setFormData] = useState<SheetLead>({
     ...lead,
     travelDate: convertToDisplayDate(lead.travelDate),
@@ -160,6 +160,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
     try {
       setSaving(true);
       
+      console.log('💾 Saving lead changes...');
       const credentials = await secureStorage.getCredentials();
       if (!credentials) {
         throw new Error('Google Sheets credentials not configured. Please check Settings or localSecrets.ts');
@@ -169,6 +170,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         throw new Error('Service Account JSON is required for updating leads. Please configure it in Settings or localSecrets.ts');
       }
 
+      console.log('✅ Credentials loaded, initializing Google Sheets service...');
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
         serviceAccountJson: credentials.googleServiceAccountJson,
@@ -177,13 +179,18 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         columnMappings: credentials.columnMappings
       });
 
-      // Convert travel date from dd/mm/yyyy back to mm/dd/yyyy for Google Sheets
+      // ✅ Convert travel date from dd/mm/yyyy back to mm/dd/yyyy for Google Sheets
       const dataToSave = {
         ...formData,
         travelDate: convertToSheetDate(formData.travelDate),
       };
 
+      console.log('🚀 Calling updateLead...');
+      console.log('Original date (display):', formData.travelDate);
+      console.log('Converted date (sheet):', dataToSave.travelDate);
+      
       await sheetsService.updateLead(lead, dataToSave);
+      console.log('✅ updateLead completed');
 
       toast({
         title: "✅ Lead updated successfully!",
@@ -194,6 +201,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       onUpdate();
       onClose();
     } catch (error: any) {
+      console.error('❌ Failed to save lead:', error);
       toast({
         variant: "destructive",
         title: "❌ Failed to update lead",
@@ -213,21 +221,183 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Form elements like Trip ID, Date, Traveller Name, Phone, Email, Status, etc. */}
-          {/* Omitted here for brevity, reuse your existing form JSX, bind it to formData */}
-          <div className="space-y-2">
-            <Label>Travel Date</Label>
-            <Input 
-              type="text"
-              placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
-              value={formData.travelDate} 
-              onChange={(e) => handleDateChange(e.target.value)}
-              className={dateError ? 'border-red-500' : ''}
-            />
-            {dateError && <p className="text-xs text-red-500">{dateError}</p>}
-            {!dateError && formData.travelDate && (<p className="text-xs text-green-600">✓ Valid date format</p>)}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Trip ID</Label>
+              <Input value={formData.tripId} readOnly className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input value={formData.dateAndTime} readOnly className="bg-muted" />
+            </div>
           </div>
-          {/* Other inputs like hotel category, remarks, etc. */}
+
+          <div className="space-y-2">
+            <Label>Traveller Name</Label>
+            <Input value={formData.travellerName} readOnly className="bg-muted" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input 
+                value={formData.phone} 
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input 
+                value={formData.email} 
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>
+                Travel Date
+                <span className="text-xs text-muted-foreground ml-2">
+                  (dd/mm/yyyy)
+                </span>
+              </Label>
+              <Input 
+                type="text"
+                placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
+                value={formData.travelDate} 
+                onChange={(e) => handleDateChange(e.target.value)}
+                className={dateError ? 'border-red-500' : ''}
+              />
+              {dateError && (
+                <p className="text-xs text-red-500">{dateError}</p>
+              )}
+              {formData.travelDate && !dateError && (
+                <p className="text-xs text-green-600">✓ Valid date format</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Travel State</Label>
+              <Input 
+                value={formData.travelState} 
+                onChange={(e) => setFormData({ ...formData, travelState: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Nights</Label>
+              <Input 
+                value={formData.nights} 
+                onChange={(e) => setFormData({ ...formData, nights: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Pax</Label>
+              <Input 
+                value={formData.pax} 
+                onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Meal Plan</Label>
+              <Input 
+                value={formData.mealPlan} 
+                onChange={(e) => setFormData({ ...formData, mealPlan: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Hotel Category</Label>
+            <Select
+              value={formData.hotelCategory}
+              onValueChange={(value) => setFormData({ ...formData, hotelCategory: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOTEL_CATEGORIES.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Remarks</Label>
+            <Textarea 
+              value={formData.remarks} 
+              onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+              rows={4}
+            />
+          </div>
+
+          {formData.notes && (
+            <div className="space-y-2">
+              <Label>Cell Notes (Column K)</Label>
+              <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                <p className="text-sm whitespace-pre-wrap">{formData.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {!formData.notes && (
+            <div className="space-y-2">
+              <Label>Cell Notes (Column K)</Label>
+              <div className="border rounded-lg p-3 bg-muted/50 border-dashed">
+                <p className="text-sm text-muted-foreground">No notes found for this lead</p>
+              </div>
+            </div>
+          )}
+
+          {formData.remarkHistory && formData.remarkHistory.length > 0 && (
+            <div className="space-y-2">
+              <Label>Remark History</Label>
+              <div className="border rounded-lg p-3 bg-muted/50 space-y-2 max-h-40 overflow-y-auto">
+                {formData.remarkHistory.map((remark, index) => (
+                  <div key={index} className="text-sm text-muted-foreground">
+                    • {remark}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowReminderDialog(true)}
+              className="w-full gap-2"
+            >
+              <Bell className="h-4 w-4" />
+              Set Reminder for this Lead
+            </Button>
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>
@@ -240,7 +410,6 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         </div>
       </DialogContent>
       
-      {/* Show reminder dialog as before */}
       {showReminderDialog && (
         <ReminderDialog
           open={showReminderDialog}

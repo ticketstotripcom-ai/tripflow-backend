@@ -3,18 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Bell } from "lucide-react";
-
-interface Reminder {
-  id: string;
-  leadTripId: string;
-  leadName: string;
-  dateTime: number; // timestamp
-  message: string;
-  notified: boolean;  // to avoid repeated notifications
-}
 
 interface ReminderDialogProps {
   open: boolean;
@@ -24,83 +15,17 @@ interface ReminderDialogProps {
   onReminderSet: (reminder: { date: string; time: string; message: string }) => void;
 }
 
-const STORAGE_KEY = "crm_reminders";
-
-// Helper to get reminders from localStorage
-const getReminders = (): Reminder[] => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
-};
-
-// Helper to save reminders to localStorage
-const saveReminders = (reminders: Reminder[]) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reminders));
-};
-
-// Background worker to check reminders every minute and notify
-const startReminderWorker = (toast: ReturnType<typeof useToast>) => {
-  setInterval(() => {
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
-
-    const reminders = getReminders();
-    const now = Date.now();
-    let updated = false;
-
-    reminders.forEach((reminder) => {
-      if (!reminder.notified && now >= reminder.dateTime) {
-        // Show desktop notification
-        new Notification("Lead Reminder", {
-          body: `${reminder.leadName} - ${reminder.message || "Follow up required"}`,
-          icon: "/favicon.ico",
-        });
-
-        // Play sound
-        const audio = new Audio(
-          "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDmH0fPTgjMGHm7A7+OZSA=="
-        );
-        audio.play().catch(() => {});
-
-        // Show in-app toast
-        toast.toast({
-          title: "Reminder",
-          description: `${reminder.leadName} - ${reminder.message || "Follow up required"}`,
-        });
-
-        reminder.notified = true;
-        updated = true;
-      }
-    });
-
-    if (updated) {
-      saveReminders(reminders);
-    }
-  }, 60000); // Check every 60 seconds
-};
-
 const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: ReminderDialogProps) => {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (open) {
-      // Request permission on dialog open
-      if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
-      }
-    }
-  }, [open]);
-
-  useEffect(() => {
-    startReminderWorker(toast);
-  }, [toast]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!date || !time) {
-      toast.toast({
+      toast({
         variant: "destructive",
         title: "Missing Information",
         description: "Please select both date and time for the reminder",
@@ -110,7 +35,7 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
 
     const reminderDateTime = new Date(`${date}T${time}`);
     if (reminderDateTime < new Date()) {
-      toast.toast({
+      toast({
         variant: "destructive",
         title: "Invalid Time",
         description: "Reminder time must be in the future",
@@ -118,28 +43,47 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
       return;
     }
 
-    // Save reminder to localStorage
-    const newReminder: Reminder = {
-      id: Date.now().toString(),
-      leadTripId,
-      leadName,
-      dateTime: reminderDateTime.getTime(),
-      message,
-      notified: false,
-    };
-
-    const reminders = getReminders();
-    reminders.push(newReminder);
-    saveReminders(reminders);
-
     onReminderSet({ date, time, message });
+    
+    // Schedule notification
+    const now = new Date().getTime();
+    const reminderTime = reminderDateTime.getTime();
+    const delay = reminderTime - now;
 
-    toast.toast({
+    if (delay > 0 && delay < 2147483647) { // Max setTimeout delay
+      setTimeout(() => {
+        // Show notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Lead Reminder', {
+            body: `${leadName} - ${message || 'Follow up required'}`,
+            icon: '/favicon.ico',
+          });
+        }
+        
+        // Play sound
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDmH0fPTgjMGHm7A7+OZSA==');
+        audio.play().catch(() => {});
+        
+        toast({
+          title: "Reminder",
+          description: `${leadName} - ${message || 'Follow up required'}`,
+        });
+      }, delay);
+    }
+
+    toast({
       title: "Reminder Set",
-      description: `You'll be notified on ${reminderDateTime.toLocaleString()}`,
+      description: `You'll be notified on ${new Date(reminderDateTime).toLocaleString()}`,
     });
 
     onClose();
+  };
+
+  // Request notification permission
+  const requestNotificationPermission = () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   };
 
   return (
@@ -161,7 +105,7 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
               value={date}
               onChange={(e) => setDate(e.target.value)}
               required
-              min={new Date().toISOString().split("T")[0]}
+              min={new Date().toISOString().split('T')[0]}
             />
           </div>
 
@@ -191,7 +135,11 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" className="gap-2">
+            <Button 
+              type="submit" 
+              onClick={requestNotificationPermission}
+              className="gap-2"
+            >
               <Bell className="h-4 w-4" />
               Set Reminder
             </Button>
