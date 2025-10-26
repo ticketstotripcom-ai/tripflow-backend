@@ -11,18 +11,20 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   const location = useLocation();
 
   const handleBack = () => {
-    window.history.back();
+    navigate(-1); // uniform history back (was window.history.back())
   };
 
+  // Home: go to root ("/") just like top navigation
   const handleHome = () => {
-    navigate('/dashboard?view=leads');
+    navigate("/");
   };
 
+  // Dashboard: handle analytics tab or custom logic
   const handleDashboard = () => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate('/dashboard?view=analytics');
+      navigate("/dashboard"); // or your preferred dashboard route
     }
   };
 
@@ -39,7 +41,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
             Back
           </Button>
           <Button
-            variant="outline"
+            variant={location.pathname === "/" ? "default" : "outline"}
             onClick={handleHome}
             className="gap-2 transition-all hover:scale-105"
           >
@@ -47,7 +49,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
             Home
           </Button>
           <Button
-            variant="outline"
+            variant={location.pathname.startsWith("/dashboard") ? "default" : "outline"}
             onClick={handleDashboard}
             className="gap-2 transition-all hover:scale-105"
           >
