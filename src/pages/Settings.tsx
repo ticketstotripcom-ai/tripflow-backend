@@ -29,7 +29,7 @@ const Settings = () => {
     meal_plan: "O",
     phone: "P",
     email: "Q",
-    priority: "R"
+    priority: "AL"
   });
   const [paymentLinks, setPaymentLinks] = useState<{ name: string; url: string; qrImage?: string }[]>([
     { name: "Primary Payment", url: "", qrImage: "" }
