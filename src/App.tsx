@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,12 +17,38 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => {
+  const [isReady, setIsReady] = useState(false);
+
   useEffect(() => {
-    // Initialize all services
-    authService.initialize();
-    notificationService.initialize();
-    themeService.initialize();
+    (async () => {
+      // Initialize all services
+      await Promise.all([
+        authService.initialize(),
+        notificationService.initialize(),
+        themeService.initialize(),
+      ]);
+      setIsReady(true);
+    })();
   }, []);
+
+  if (!isReady) {
+    // Prevent flicker before theme loads
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          backgroundColor: "var(--background-color, #fff)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--text-color, #000)",
+        }}
+      >
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -30,7 +56,6 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          
           <div>
             <Routes>
               <Route path="/" element={<Index />} />
