@@ -1,44 +1,32 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding-left: 1rem;
-  padding-right: 1rem;
-  padding-top: 0;
+/* === THEME SUPPORT ENHANCEMENTS === */
+
+/* Smooth background/text transitions between light and dark */
+html, body {
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* Light mode (default) */
+:root {
+  --background-color: #ffffff;
+  --text-color: #1a1a1a;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Dark mode activated when .dark class is added by ThemeService */
+html.dark {
+  --background-color: #121212;
+  --text-color: #f1f1f1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Apply theme colors globally */
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
 
+/* Optional: make cards and other elements adapt to theme */
 .card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  transition: background-color 0.3s ease, color 0.3s ease, border 0.3s ease;
 }
