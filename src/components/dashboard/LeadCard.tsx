@@ -16,67 +16,48 @@ interface LeadCardProps {
   onSwipeRight?: (lead: SheetLead) => void;
 }
 
-/**
- * ✅ FIXED: Convert mm/dd/yyyy to "6 November 2025" format
- */
+/** UNIVERSAL robust date formatter for all plausible formats */
 const formatTravelDate = (dateStr: string): string => {
   if (!dateStr) return '';
-  
   try {
-    // Remove any whitespace
     const s = String(dateStr).trim();
-    console.log('📅 Formatting date:', s); // Debug log
-    
-    // Parse mm/dd/yyyy or m/d/yyyy format
-    const match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (match) {
-      const mm = Number(match[1]);  // month
-      const dd = Number(match[2]);  // day
-      let yyyy = Number(match[3]);  // year
-      
-      // Convert 2-digit year to 4-digit
-      if (yyyy < 100) {
-        yyyy = yyyy < 50 ? 2000 + yyyy : 1900 + yyyy;
+    // dd-Month-yy (or yyyy) and d-Month-yy, etc.
+    const m1 = s.match(/^(\d{1,2})[\/\-\s]([A-Za-z]+)[\/\-\s](\d{2,4})$/);
+    if (m1) {
+      const months = ["january","february","march","april","may","june","july","august",
+        "september","october","november","december"];
+      let monthIndex = months.indexOf(m1[2].toLowerCase());
+      let yyyy = m1[3].length === 2 ? (Number(m1[3]) < 50 ? 2000 + Number(m1[3]) : 1900 + Number(m1[3])) : Number(m1[3]);
+      if (monthIndex !== -1) {
+        let dateObj = new Date(yyyy, monthIndex, Number(m1[1]));
+        if (!isNaN(dateObj.getTime())) {
+          return dateObj.toLocaleDateString('en-GB', { day: "numeric", month: "long", year: "numeric" });
+        }
       }
-      
-      console.log('📅 Parsed:', { mm, dd, yyyy });
-      
-      // Create date object (month is 0-indexed in JavaScript)
-      const date = new Date(yyyy, mm - 1, dd);
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        console.warn('⚠️ Invalid date:', s);
-        return s;
-      }
-      
-      // Format as "6 November 2025"
-      const formatted = date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-      
-      console.log('✅ Formatted:', formatted);
-      return formatted;
     }
-    
-    // If regex doesn't match, try Date constructor
-    console.warn('⚠️ Date format not recognized, trying Date constructor:', s);
+    // yyyy-mm-dd (ISO)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const date = new Date(s);
+      if (!isNaN(date.getTime())) return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
+    }
+    // dd/mm/yyyy or mm/dd/yyyy or their hyphen versions
+    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m2) {
+      let a = Number(m2[1]), b = Number(m2[2]), y = Number(m2[3]);
+      let yyyy = y < 100 ? (y < 50 ? 2000 + y : 1900 + y) : y;
+      let date: Date;
+      if (a > 12) date = new Date(yyyy, b - 1, a);
+      else date = new Date(yyyy, a - 1, b);
+      if (!isNaN(date.getTime())) 
+        return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
+    }
+    // generic fallback
     const date = new Date(s);
     if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
+      return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
     }
-    
-    // Fallback: return original
-    console.warn('❌ Could not format date:', s);
     return s;
-  } catch (e) {
-    console.error('❌ Error formatting date:', dateStr, e);
+  } catch {
     return dateStr;
   }
 };
@@ -84,7 +65,6 @@ const formatTravelDate = (dateStr: string): string => {
 const getCardBackgroundByStatus = (status: string, priority: string) => {
   const lowerStatus = status.toLowerCase();
   const lowerPriority = priority?.toLowerCase() || 'medium';
-  
   if (lowerStatus.includes('booked with us')) {
     return 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800';
   }
@@ -97,14 +77,12 @@ const getCardBackgroundByStatus = (status: string, priority: string) => {
   if (lowerStatus.includes('working') || lowerStatus.includes('whatsapp')) {
     return 'bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-purple-200 dark:border-purple-800';
   }
-  
   if (lowerPriority === 'high') {
     return 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-red-200 dark:border-red-800';
   }
   if (lowerPriority === 'low') {
     return 'bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-950/30 dark:to-gray-950/30 border-slate-200 dark:border-slate-800';
   }
-  
   return 'bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 border-yellow-200 dark:border-yellow-800';
 };
 
@@ -211,7 +189,7 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
             <Bell className="h-6 w-6" />
           </div>
         )}
-        
+
         {isConverted && (
           <div className="absolute top-2 right-2 z-10 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium animate-fade-in">
             ✓ Converted!

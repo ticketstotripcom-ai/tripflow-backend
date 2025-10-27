@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
+import { stateManager } from "@/lib/statemanager";
 import { Bell } from "lucide-react";
 import ReminderDialog from "./ReminderDialog";
 
@@ -20,66 +21,39 @@ interface LeadDetailsDialogProps {
 }
 
 const LEAD_STATUSES = [
-  "Unfollowed",
-  "Follow-up Calls",
-  "Follow-up Calls - 1",
-  "Follow-up Calls - 2",
-  "Follow-up Calls - 3",
-  "Follow-up Calls - 4",
-  "Follow-up Calls - 5",
-  "Working on it",
-  "Whatsapp Sent",
-  "Proposal 1 Shared",
-  "Proposal 2 Shared",
-  "Proposal 3 Shared",
-  "Negotiations",
-  "Hot Leads",
-  "Booked With Us",
-  "Cancellations",
-  "Postponed",
-  "Booked Outside",
-  "Pamplets Shared",
+  "Unfollowed","Follow-up Calls","Follow-up Calls - 1","Follow-up Calls - 2","Follow-up Calls - 3",
+  "Follow-up Calls - 4","Follow-up Calls - 5","Working on it","Whatsapp Sent","Proposal 1 Shared",
+  "Proposal 2 Shared","Proposal 3 Shared","Negotiations","Hot Leads","Booked With Us",
+  "Cancellations","Postponed","Booked Outside","Pamplets Shared",
 ];
 
 const HOTEL_CATEGORIES = ["Basic", "3 Star", "3 Star Plus", "4 Star", "5 Star"];
 const MEAL_PLANS = [
-  "EPAI (No Meal)",
-  "CPAI (Only Breakfast)",
-  "MAPAI (Breakfast and Dinner)",
-  "APAI (Breakfast, Lunch and Dinner)",
-  "All Meal with High Tea"
+  "EPAI (No Meal)","CPAI (Only Breakfast)","MAPAI (Breakfast and Dinner)",
+  "APAI (Breakfast, Lunch and Dinner)","All Meal with High Tea",
 ];
 
-// Date utils
-function prettyDateDisplay(dateStr: string) {
-  const m = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return dateStr;
-  const day = m[1].padStart(2, "0");
-  const month = Number(m[2]);
-  const year = m[3];
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  if (month<1||month>12) return dateStr;
-  return `${day} ${months[month-1]} ${year}`;
-}
+// Date parsing & formatting utilities
 function parseAnyDate(str: string): Date | undefined {
   if (!str) return undefined;
   let d: Date | undefined = undefined;
-  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) { // dd/mm/yyyy or mm/dd/yyyy
-    const [a, b, c] = str.split("/");
-    if (Number(a) > 12) d = new Date(Number(c), Number(b)-1, Number(a));
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) {
+    const [a,b,c] = str.split("/");
+    if(Number(a) > 12) d = new Date(Number(c), Number(b)-1, Number(a));
     else d = new Date(Number(c), Number(a)-1, Number(b));
-  } else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) { // yyyy-mm-dd
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
     d = new Date(str);
-  } else if (/^[0-9]{1,2}-[A-Za-z]+-\d{2,4}$/.test(str)) { // 25-December-2025
-    const [dd, Month, yyyy] = str.split("-");
+  } else if (/^[0-9]{1,2}-[A-Za-z]+-\d{2,4}$/.test(str)) {
+    const [dd,Month,yyyy] = str.split("-");
     d = new Date(`${Month} ${dd}, ${yyyy}`);
   } else {
     const jsDate = new Date(str);
-    if (!isNaN(jsDate.getTime())) d = jsDate;
+    if(!isNaN(jsDate.getTime())) d = jsDate;
   }
   if (d && !isNaN(d.getTime())) return d;
   return undefined;
 }
+
 function dateToDDMMYYYY(date: Date | string | undefined): string {
   if (!date) return "";
   let d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date();
@@ -89,6 +63,18 @@ function dateToDDMMYYYY(date: Date | string | undefined): string {
   const yyyy = d.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
 }
+
+function prettyDateDisplay(dateStr: string) {
+  const m = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return dateStr;
+  const day = m[1].padStart(2, "0");
+  const month = Number(m[2]);
+  const year = m[3];
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  if (month<1 || month>12) return dateStr;
+  return `${day} ${months[month-1]} ${year}`;
+}
+
 function sanitizeText(str: string = "") {
   return str.replace(/[\u0000-\u001F\u007F-\u009F]/g,"");
 }
@@ -113,6 +99,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       setDateError("");
     }
   };
+
   const handleCalendarChange = (date: Date | undefined) => {
     if (!date) return;
     const normalized = dateToDDMMYYYY(date);
@@ -146,6 +133,14 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         notes: sanitizeText(formData.notes)
       };
       await sheetsService.updateLead(lead, dataToSave);
+
+      // Immediately update cached leads in app state for instant UI update
+      const cachedLeads = stateManager.getCachedLeads().leads;
+      const updatedLeads = cachedLeads.map(l =>
+        l.tripId === lead.tripId ? { ...l, ...dataToSave } : l
+      );
+      stateManager.setCachedLeads(updatedLeads);
+
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
       onUpdate();
       onClose();
@@ -163,7 +158,6 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
           <DialogTitle>Lead Details - {lead.travellerName}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Trip ID</Label>
@@ -384,7 +378,9 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
           onClose={() => setShowReminderDialog(false)}
           leadTripId={lead.tripId}
           leadName={lead.travellerName}
-          onReminderSet={reminder => { console.log('Reminder set:', reminder); }}
+          onReminderSet={(reminder) => {
+            console.log('Reminder set:', reminder);
+          }}
         />
       )}
     </Dialog>
