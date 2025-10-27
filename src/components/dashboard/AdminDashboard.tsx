@@ -14,7 +14,7 @@ import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
-import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus } from "@/lib/leadStatus";
+import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
 
 const AdminDashboard = () => {
   const location = useLocation();
@@ -149,9 +149,15 @@ const AdminDashboard = () => {
     [filteredLeads]
   );
 
-  // ✅ BOOKED LEADS: booked with us
+  // ✅ BOOKED LEADS: booked with us
   const bookedLeads = useMemo(() =>
     filteredLeads.filter(lead => isBookedStatus(lead.status)),
+    [filteredLeads]
+  );
+
+  // ❌ CANCEL LEADS: cancellations, booked outside, postponed
+  const cancelLeads = useMemo(() =>
+    filteredLeads.filter(lead => isCancelCategoryStatus(lead.status)),
     [filteredLeads]
   );
 
@@ -291,8 +297,8 @@ const AdminDashboard = () => {
         <Tabs value={activeTab} onValueChange={(tab) => {
           setActiveTab(tab);
           stateManager.setActiveTab(tab);
-        }} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+        }} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="new">
               New Leads ({newLeads.length})
             </TabsTrigger>
@@ -302,6 +308,9 @@ const AdminDashboard = () => {
             <TabsTrigger value="booked">
               Booked ({bookedLeads.length})
             </TabsTrigger>
+            <TabsTrigger value="cancel">
+              Cancel ({cancelLeads.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="new">
@@ -315,6 +324,10 @@ const AdminDashboard = () => {
           <TabsContent value="booked">
             {renderLeadGrid(bookedLeads)}
           </TabsContent>
+
+          <TabsContent value="cancel">
+            {renderLeadGrid(cancelLeads)}
+          </TabsContent>
         </Tabs>
       )}
 
