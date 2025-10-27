@@ -148,7 +148,7 @@ const ConsultantDashboard = () => {
     ), [filteredLeads]
   );
 
-  const handleSwipeLeft = async (lead: SheetLead) => {
+  const handleSwipeLeft = async (lead: SheetLead) => {
     try {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Credentials not found');
@@ -161,12 +161,20 @@ const ConsultantDashboard = () => {
         columnMappings: credentials.columnMappings
       });
 
-      await sheetsService.updateLead(lead, { status: 'Converted' });
+      // Optimistic UI update
+      setLeads((prev) => prev.map((l) =>
+        l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
+          ? { ...l, status: 'Converted' }
+          : l
+      ));
+
+      await sheetsService.updateLead(lead, { status: 'Converted' });
       toast({
         title: "Lead Converted!",
         description: `${lead.travellerName} marked as booked.`,
       });
-      fetchLeads();
+      // Force refresh to bypass cached leads so UI stays consistent
+      fetchLeads(false, true);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -293,22 +301,56 @@ const ConsultantDashboard = () => {
         </Tabs>
       )}
 
-      {selectedLead && (
-        <LeadDetailsDialog
-          lead={selectedLead}
-          open={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
-          onUpdate={fetchLeads}
-        />
-      )}
+      {selectedLead && (
+        <LeadDetailsDialog
+          lead={selectedLead}
+          open={!!selectedLead}
+          onClose={() => setSelectedLead(null)}
+          // Force refresh after saving to reflect changes immediately
+          onUpdate={() => fetchLeads(false, true)}
+          onImmediateUpdate={(updated) => {
+            setLeads((prev) => prev.map((l) =>
+              l.tripId === updated.tripId && l.travellerName === updated.travellerName && l.dateAndTime === updated.dateAndTime
+                ? { ...l, ...updated }
+                : l
+            ));
+          })}
+        />
+      )}
 
-      {showAddDialog && (
-        <AddLeadDialog
-          open={showAddDialog}
-          onClose={() => setShowAddDialog(false)}
-          onSuccess={fetchLeads}
-        />
-      )}
+      {showAddDialog && (
+        <AddLeadDialog
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          // Force refresh after adding to include the new lead immediately
+          onSuccess={() => fetchLeads(false, true)}
+          onImmediateAdd={(newLead) => {
+            setLeads((prev) => [
+              {
+                tripId: newLead.tripId || '',
+                dateAndTime: newLead.dateAndTime || '',
+                consultant: (newLead as any).consultant || '',
+                status: newLead.status || 'Unfollowed',
+                travellerName: newLead.travellerName || '',
+                travelDate: newLead.travelDate || '',
+                travelState: newLead.travelState || '',
+                remarks: newLead.remarks || '',
+                nights: newLead.nights || '',
+                pax: newLead.pax || '',
+                hotelCategory: newLead.hotelCategory || '',
+                mealPlan: newLead.mealPlan || '',
+                phone: newLead.phone || '',
+                email: newLead.email || '',
+                priority: newLead.priority as any,
+                remarkHistory: [],
+                notes: '',
+                _rowNumber: undefined,
+              } as any,
+              ...prev,
+            ]);
+          }}
+        />
+      )}
     </div>
   );
 };
