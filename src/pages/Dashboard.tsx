@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Settings } from "lucide-react";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import ConsultantDashboard from "@/components/dashboard/ConsultantDashboard";
-import BottomNavigation from "@/components/BottomNavigation";
 import { authService } from "@/lib/authService";
 import { themeService } from "@/lib/themeService";
 import { Moon, Sun } from "lucide-react";
@@ -83,7 +82,7 @@ const Dashboard = () => {
         {session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />}
       </main>
 
-      <BottomNavigation />
+      {/* BottomNavigation is rendered globally in App.tsx */}
     </div>
   );
 };
