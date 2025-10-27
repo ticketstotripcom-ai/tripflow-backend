@@ -50,7 +50,7 @@ const MEAL_PLANS = [
   "All Meal with High Tea"
 ];
 
-// Format "25/12/2025" to "25 December 2025"
+// Date utils
 function prettyDateDisplay(dateStr: string) {
   const m = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return dateStr;
@@ -61,7 +61,6 @@ function prettyDateDisplay(dateStr: string) {
   if (month<1||month>12) return dateStr;
   return `${day} ${months[month-1]} ${year}`;
 }
-// Returns Date object from any recognizable format, or undefined
 function parseAnyDate(str: string): Date | undefined {
   if (!str) return undefined;
   let d: Date | undefined = undefined;
@@ -81,7 +80,6 @@ function parseAnyDate(str: string): Date | undefined {
   if (d && !isNaN(d.getTime())) return d;
   return undefined;
 }
-// Always output dd/mm/yyyy
 function dateToDDMMYYYY(date: Date | string | undefined): string {
   if (!date) return "";
   let d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date();
@@ -91,13 +89,11 @@ function dateToDDMMYYYY(date: Date | string | undefined): string {
   const yyyy = d.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
 }
-
 function sanitizeText(str: string = "") {
   return str.replace(/[\u0000-\u001F\u007F-\u009F]/g,"");
 }
 
 const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogProps) => {
-  // Always keep travelDate as string dd/mm/yyyy
   const [formData, setFormData] = useState<SheetLead>({
     ...lead,
     travelDate: dateToDDMMYYYY(lead.travelDate),
@@ -108,7 +104,6 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
   const [dateError, setDateError] = useState<string>("");
   const { toast } = useToast();
 
-  // Handle date from input and also auto-correct
   const handleDateChange = (rawVal: string) => {
     const normalized = dateToDDMMYYYY(parseAnyDate(rawVal) || rawVal);
     setFormData({ ...formData, travelDate: normalized });
@@ -118,8 +113,6 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       setDateError("");
     }
   };
-
-  // Handle calendar selection
   const handleCalendarChange = (date: Date | undefined) => {
     if (!date) return;
     const normalized = dateToDDMMYYYY(date);
@@ -129,10 +122,9 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
   };
 
   const handleSave = async () => {
-    // Ensure travelDate is dd/mm/yyyy
     if (!formData.travelDate || !/^\d{2}\/\d{2}\/\d{4}$/.test(formData.travelDate)) {
       setDateError("Please select or enter a valid date (dd/mm/yyyy).");
-      toast({ variant: "destructive", title: "❌ Invalid date format", description: "Please use or pick dd/mm/yyyy format (e.g., 25/10/2025)", duration: 4000 });
+      toast({ variant: "destructive", title: "❌ Invalid date format", description: "Use or pick dd/mm/yyyy (e.g., 25/10/2025)", duration: 4000 });
       return;
     }
     try {
@@ -149,12 +141,12 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       });
       const dataToSave = {
         ...formData,
-        travelDate: `${formData.travelDate.split("/")[1]}/${formData.travelDate.split("/")[0]}/${formData.travelDate.split("/")[2]}`, // mm/dd/yyyy
+        travelDate: `${formData.travelDate.split("/")[1]}/${formData.travelDate.split("/")[0]}/${formData.travelDate.split("/")[2]}`, // mm/dd/yyyy for Sheets
         remarks: sanitizeText(formData.remarks),
         notes: sanitizeText(formData.notes)
       };
       await sheetsService.updateLead(lead, dataToSave);
-      toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved to Google Sheets", duration: 3000 });
+      toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
       onUpdate();
       onClose();
     } catch (error: any) {
@@ -172,7 +164,58 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         </DialogHeader>
         <div className="space-y-4">
 
-          {/* Existing fields... */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Trip ID</Label>
+              <Input value={formData.tripId} readOnly className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input value={formData.dateAndTime} readOnly className="bg-muted" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Traveller Name</Label>
+            <Input value={formData.travellerName} readOnly className="bg-muted" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input 
+                value={formData.phone} 
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input 
+                value={formData.email} 
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
@@ -184,7 +227,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
                   type="text"
                   placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
                   value={formData.travelDate}
-                  onChange={(e) => handleDateChange(e.target.value)}
+                  onChange={e => handleDateChange(e.target.value)}
                   className={dateError ? 'border-red-500' : ''}
                   autoComplete="off"
                   onFocus={() => setCalendarOpen(true)}
@@ -213,6 +256,30 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
               )}
             </div>
             <div className="space-y-2">
+              <Label>Travel State</Label>
+              <Input 
+                value={formData.travelState} 
+                onChange={(e) => setFormData({ ...formData, travelState: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Nights</Label>
+              <Input 
+                value={formData.nights} 
+                onChange={(e) => setFormData({ ...formData, nights: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Pax</Label>
+              <Input 
+                value={formData.pax} 
+                onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Meal Plan</Label>
               <Select
                 value={formData.mealPlan || ""}
@@ -230,17 +297,87 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
             </div>
           </div>
 
-          {/* ...rest of your form fields exactly as before... */}
+          <div className="space-y-2">
+            <Label>Hotel Category</Label>
+            <Select
+              value={formData.hotelCategory}
+              onValueChange={(value) => setFormData({ ...formData, hotelCategory: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOTEL_CATEGORIES.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Remarks</Label>
+            <Textarea 
+              value={formData.remarks} 
+              onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+              rows={4}
+            />
+          </div>
+
+          {formData.notes && (
+            <div className="space-y-2">
+              <Label>Cell Notes (Column K)</Label>
+              <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                <p className="text-sm whitespace-pre-wrap">{formData.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {!formData.notes && (
+            <div className="space-y-2">
+              <Label>Cell Notes (Column K)</Label>
+              <div className="border rounded-lg p-3 bg-muted/50 border-dashed">
+                <p className="text-sm text-muted-foreground">No notes found for this lead</p>
+              </div>
+            </div>
+          )}
+
+          {formData.remarkHistory && formData.remarkHistory.length > 0 && (
+            <div className="space-y-2">
+              <Label>Remark History</Label>
+              <div className="border rounded-lg p-3 bg-muted/50 space-y-2 max-h-40 overflow-y-auto">
+                {formData.remarkHistory.map((remark, index) => (
+                  <div key={index} className="text-sm text-muted-foreground">
+                    • {remark}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowReminderDialog(true)}
+              className="w-full gap-2"
+            >
+              <Bell className="h-4 w-4" />
+              Set Reminder for this Lead
+            </Button>
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
             <Button onClick={handleSave} disabled={saving || !!dateError}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </div>
       </DialogContent>
-
       {showReminderDialog && (
         <ReminderDialog
           open={showReminderDialog}
