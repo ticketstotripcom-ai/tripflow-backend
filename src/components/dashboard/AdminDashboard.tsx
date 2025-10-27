@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react"; // 👈 ADDED useCallback
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
@@ -16,307 +16,337 @@ import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
 
 const AdminDashboard = () => {
-  const location = useLocation();
-  const viewParam = new URLSearchParams(location.search).get('view');
-  const isAnalyticsOnly = viewParam === 'analytics';
-  const [leads, setLeads] = useState<SheetLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
-  const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
-  const savedFilters = stateManager.getFilters();
-  const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
-  const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
-  const [dateFilter, setDateFilter] = useState(savedFilters.dateFilter);
-  const [consultantFilter, setConsultantFilter] = useState(savedFilters.consultantFilter);
-  const [activeTab, setActiveTab] = useState(() => {
-    if (isAnalyticsOnly) return "dashboard";
-    const saved = stateManager.getActiveTab();
-    return saved || "new";
-  });
-  const { toast } = useToast();
-  const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
+  const location = useLocation();
+  const viewParam = new URLSearchParams(location.search).get('view');
+  const isAnalyticsOnly = viewParam === 'analytics';
+  const [leads, setLeads] = useState<SheetLead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
+  const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
+  const savedFilters = stateManager.getFilters();
+  const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
+  const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
+  const [dateFilter, setDateFilter] = useState(savedFilters.dateFilter);
+  const [consultantFilter, setConsultantFilter] = useState(savedFilters.consultantFilter);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (isAnalyticsOnly) return "dashboard";
+    const saved = stateManager.getActiveTab();
+    return saved || "new";
+  });
+  const { toast } = useToast();
+  const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
-  const fetchLeads = async (silent = false, forceRefresh = false) => {
-    try {
-      // Check cache first unless force refresh
-      if (!forceRefresh) {
-        const cached = stateManager.getCachedLeads();
-        if (cached.isValid) {
-          setLeads(cached.leads);
-          if (!silent) setLoading(false);
-          console.log('Using cached leads');
-          return;
-        }
-      }
+  const fetchLeads = async (silent = false, forceRefresh = false) => {
+    try {
+      // Check cache first unless force refresh
+      if (!forceRefresh) {
+        const cached = stateManager.getCachedLeads();
+        if (cached.isValid) {
+          setLeads(cached.leads);
+          if (!silent) setLoading(false);
+          console.log('Using cached leads');
+          return;
+        }
+      }
 
-      if (!silent) setLoading(true);
-      
-      const credentials = await secureStorage.getCredentials();
-      if (!credentials) {
-        throw new Error('Google Sheets not configured');
-      }
+      if (!silent) setLoading(true);
+      
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) {
+        throw new Error('Google Sheets not configured');
+      }
 
-      const sheetsService = new GoogleSheetsService({
-        apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
-        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
-        worksheetNames: credentials.worksheetNames,
-        columnMappings: credentials.columnMappings
-      });
+      const sheetsService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: credentials.googleServiceAccountJson,
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings
+      });
 
-      const data = await sheetsService.fetchLeads();
-      setLeads(data);
-      stateManager.setCachedLeads(data);
-      
-      if (silent) {
-        console.log('Background sync completed');
-      }
-    } catch (error: any) {
-      if (!silent) {
-        toast({
-          variant: "destructive",
-          title: "Error fetching leads",
-          description: error.message,
-        });
-      } else {
-        console.error('Background sync error:', error);
-      }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
+      const data = await sheetsService.fetchLeads();
+      setLeads(data);
+      stateManager.setCachedLeads(data);
+      
+      if (silent) {
+        console.log('Background sync completed');
+      }
+    } catch (error: any) {
+      if (!silent) {
+        toast({
+          variant: "destructive",
+          title: "Error fetching leads",
+          description: error.message,
+        });
+      } else {
+        console.error('Background sync error:', error);
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
 
-  // 🚀 NEW: Function to update the lead state locally
-  const handleLeadUpdate = useCallback((updatedLead: SheetLead) => {
-    setLeads(currentLeads => {
-      const updatedLeads = currentLeads.map(lead =>
-        lead.tripId === updatedLead.tripId ? updatedLead : lead
-      );
-      stateManager.setCachedLeads(updatedLeads); // Update cache too
-      return updatedLeads;
-    });
-    setSelectedLead(updatedLead); // Keep the dialog's reference up to date
-  }, []);
+  useEffect(() => {
+    fetchLeads();
+  }, []);
 
+  // Silent background sync every 30 seconds without navigation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLeads(true); // Silent sync
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  useEffect(() => {
-    fetchLeads();
-  }, []);
+  // Get unique consultants
+  const consultants = useMemo(() => {
+    const uniqueConsultants = [...new Set(leads.map(lead => lead.consultant).filter(Boolean))];
+    return uniqueConsultants;
+  }, [leads]);
 
-  // Silent background sync every 30 seconds without navigation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLeads(true); // Silent sync
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Filter and search logic
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      const matchesSearch = !searchQuery || 
+        lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lead.phone.includes(searchQuery);
+      
+      const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
+      const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
+      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+      const matchesConsultant = consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
+      
+      return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesConsultant;
+    });
+  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
 
-  // Get unique consultants
-  const consultants = useMemo(() => {
-    const uniqueConsultants = [...new Set(leads.map(lead => lead.consultant).filter(Boolean))];
-    return uniqueConsultants;
-  }, [leads]);
+  // 🆕 NEW LEADS: blank or "unfollowed"
+  const newLeads = useMemo(() =>
+    filteredLeads.filter(lead => {
+      const status = (lead.status || "").toLowerCase();
+      const hasData =
+        lead.travellerName?.trim() ||
+        lead.phone?.trim() ||
+        lead.tripId?.trim();
 
-  // Filter and search logic
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const matchesSearch = !searchQuery || 
-        lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery);
-      
-      const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
-      const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
-      const matchesConsultant = consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
-      
-      return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesConsultant;
-    });
-  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
+      return (
+        hasData &&
+        (status === "" || status.includes("unfollowed"))
+      );
+    }),
+    [filteredLeads]
+  );
 
-  // 🆕 NEW LEADS: blank or "unfollowed"
-  const newLeads = useMemo(() =>
-    filteredLeads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      const hasData =
-        lead.travellerName?.trim() ||
-        lead.phone?.trim() ||
-        lead.tripId?.trim();
+  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+  const workingLeads = useMemo(() =>
+    filteredLeads.filter(lead => {
+      const status = (lead.status || "").toLowerCase();
+      return (
+        status.includes("follow-up") ||
+        status.includes("working") ||
+        status.includes("whatsapp") ||
+        status.includes("proposal") ||
+        status.includes("negotiations") ||
+        status.includes("hot")
+      );
+    }),
+    [filteredLeads]
+  );
 
-      return (
-        hasData &&
-        (status === "" || status.includes("unfollowed"))
-      );
-    }),
-    [filteredLeads]
-  );
+  // ✅ BOOKED LEADS: booked with us
+  const bookedLeads = useMemo(() =>
+    filteredLeads.filter(lead =>
+      (lead.status || "").toLowerCase().includes("booked with us")
+    ),
+    [filteredLeads]
+  );
 
-  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
-  const workingLeads = useMemo(() =>
-    filteredLeads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      return (
-        status.includes("follow-up") ||
-        status.includes("working") ||
-        status.includes("whatsapp") ||
-        status.includes("proposal") ||
-        status.includes("negotiations") ||
-        status.includes("hot")
-      );
-    }),
-    [filteredLeads]
-  );
+  const handleSwipeLeft = async (lead: SheetLead) => {
+    try {
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) throw new Error('Credentials not found');
 
-  // ✅ BOOKED LEADS: booked with us
-  const bookedLeads = useMemo(() =>
-    filteredLeads.filter(lead =>
-      (lead.status || "").toLowerCase().includes("booked with us")
-    ),
-    [filteredLeads]
-  );
+      const sheetsService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: credentials.googleServiceAccountJson,
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings
+      });
 
-  const handleSwipeLeft = async (lead: SheetLead) => {
-    // ... (omitted for brevity, as this should force a refetch or use handleLeadUpdate)
-    // For a swipe, a full refetch is often acceptable since it's a big status change.
-    // But you could also manually update the lead status here.
-    try {
-      const credentials = await secureStorage.getCredentials();
-      if (!credentials) throw new Error('Credentials not found');
+      await sheetsService.updateLead(lead, { status: 'Converted' });
+      toast({
+        title: "Lead Converted!",
+        description: `${lead.travellerName} marked as booked.`,
+      });
+      fetchLeads();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to convert lead",
+        description: error.message,
+      });
+    }
+  };
 
-      const sheetsService = new GoogleSheetsService({
-        apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
-        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
-        worksheetNames: credentials.worksheetNames,
-        columnMappings: credentials.columnMappings
-      });
+  const handleSwipeRight = (lead: SheetLead) => {
+    toast({
+      title: "Reminder Set!",
+      description: `Reminder created for ${lead.travellerName}`,
+    });
+  };
 
-      await sheetsService.updateLead(lead, { status: 'Booked With Us' }); // Changed to match your status list
-      toast({
-        title: "Lead Converted!",
-        description: `${lead.travellerName} marked as booked.`,
-      });
-      fetchLeads(false, true); // Force a refresh since status changes tabs
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Failed to convert lead",
-        description: error.message,
-      });
-    }
-  };
+  const renderLeadGrid = (leadsToRender: SheetLead[]) => {
+    if (loading) {
+      return (
+        <div className="text-center py-12">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading leads...</p>
+        </div>
+      );
+    }
 
-  const handleSwipeRight = (lead: SheetLead) => {
-    toast({
-      title: "Reminder Set!",
-      description: `Reminder created for ${lead.travellerName}`,
-    });
-  };
+    if (leadsToRender.length === 0) {
+      return (
+        <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <p className="text-muted-foreground">No leads found matching the criteria.</p>
+        </div>
+      );
+    }
 
-  const renderLeadGrid = (leadsToRender: SheetLead[]) => {
-    if (loading) {
-      return (
-        <div className="text-center py-12">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading leads...</p>
-        </div>
-      );
-    }
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        {leadsToRender.map((lead, index) => (
+          <LeadCard
+            key={`${lead.tripId}-${index}`} 
+            lead={lead} 
+            onClick={() => setSelectedLead(lead)}
+            onAssign={() => setLeadToAssign(lead)}
+            showAssignButton={true}
+            onSwipeLeft={handleSwipeLeft}
+            onSwipeRight={handleSwipeRight}
+          />
+        ))}
+      </div>
+    );
+  };
 
-    if (leadsToRender.length === 0) {
-      return (
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">No leads found matching the criteria.</p>
-        </div>
-      );
-    }
+  return (
+    <div className="space-y-3 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">All Leads</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign leads to consultants</p>
+        </div>
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
+          <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Add Lead</span>
+          </Button>
+          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+        </div>
+      </div>
 
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {leadsToRender.map((lead, index) => (
-          <LeadCard
-            key={`${lead.tripId}-${index}`} 
-            lead={lead} 
-            onClick={() => setSelectedLead(lead)}
-            onAssign={() => setLeadToAssign(lead)}
-            showAssignButton={true}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        ))}
-      </div>
-    );
-  };
+      <SearchBar value={searchQuery} onChange={(query) => {
+        setSearchQuery(query);
+        stateManager.setSearchQuery(query);
+      }} />
 
-  return (
-    <div className="space-y-3 sm:space-y-6">
-      {/* ... rest of the component is unchanged ... */}
+      <LeadFilters
+        statusFilter={statusFilter}
+        priorityFilter={priorityFilter}
+        dateFilter={dateFilter}
+        consultantFilter={consultantFilter}
+        onStatusChange={(val) => {
+          setStatusFilter(val);
+          stateManager.setFilters({ statusFilter: val });
+        }}
+        onPriorityChange={(val) => {
+          setPriorityFilter(val);
+          stateManager.setFilters({ priorityFilter: val });
+        }}
+        onDateFilterChange={(val) => {
+          setDateFilter(val);
+          stateManager.setFilters({ dateFilter: val });
+        }}
+        onConsultantChange={(val) => {
+          setConsultantFilter(val);
+          stateManager.setFilters({ consultantFilter: val });
+        }}
+        consultants={consultants}
+        showConsultantFilter={true}
+      />
 
-      {isAnalyticsOnly ? (
-        <div className="space-y-6">
-          <DashboardStats leads={leads} />
-        </div>
-      ) : (
-        <Tabs value={activeTab} onValueChange={(tab) => {
-          setActiveTab(tab);
-          stateManager.setActiveTab(tab);
-        }} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="new">
-              New Leads ({newLeads.length})
-            </TabsTrigger>
-            <TabsTrigger value="working">
-              Working ({workingLeads.length})
-            </TabsTrigger>
-            <TabsTrigger value="booked">
-              Booked ({bookedLeads.length})
-            </TabsTrigger>
-          </TabsList>
+      {isAnalyticsOnly ? (
+        <div className="space-y-6">
+          {/* ✅ ONLY DashboardStats - Removed KeyMetricsCards */}
+          <DashboardStats leads={leads} />
+        </div>
+      ) : (
+        <Tabs value={activeTab} onValueChange={(tab) => {
+          setActiveTab(tab);
+          stateManager.setActiveTab(tab);
+        }} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="new">
+              New Leads ({newLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="working">
+              Working ({workingLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="booked">
+              Booked ({bookedLeads.length})
+            </TabsTrigger>
+          </TabsList>
 
-          <TabsContent value="new">
-            {renderLeadGrid(newLeads)}
-          </TabsContent>
+          <TabsContent value="new">
+            {renderLeadGrid(newLeads)}
+          </TabsContent>
 
-          <TabsContent value="working">
-            {renderLeadGrid(workingLeads)}
-          </TabsContent>
+          <TabsContent value="working">
+            {renderLeadGrid(workingLeads)}
+          </TabsContent>
 
-          <TabsContent value="booked">
-            {renderLeadGrid(bookedLeads)}
-          </TabsContent>
-        </Tabs>
-      )}
+          <TabsContent value="booked">
+            {renderLeadGrid(bookedLeads)}
+          </TabsContent>
+        </Tabs>
+      )}
 
-      {selectedLead && (
-        <LeadDetailsDialog
-          lead={selectedLead}
-          open={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
-          onUpdate={handleLeadUpdate} {/* 👈 UPDATED TO INSTANT LOCAL UPDATE */}
-        />
-      )}
+      {selectedLead && (
+        <LeadDetailsDialog
+          lead={selectedLead}
+          open={!!selectedLead}
+          onClose={() => setSelectedLead(null)}
+          onUpdate={fetchLeads}
+        />
+      )}
 
-      {showAddDialog && (
-        <AddLeadDialog
-          open={showAddDialog}
-          onClose={() => setShowAddDialog(false)}
-          onSuccess={() => fetchLeads(false, true)} // A full refresh is fine for adding a lead
-        />
-      )}
+      {showAddDialog && (
+        <AddLeadDialog
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          onSuccess={fetchLeads}
+        />
+      )}
 
-      {leadToAssign && (
-        <AssignLeadDialog
-          open={!!leadToAssign}
-          onClose={() => setLeadToAssign(null)}
-          lead={leadToAssign}
-          consultants={consultants}
-          onSuccess={() => fetchLeads(false, true)} // A full refresh is needed if consultant changes
-        />
-      )}
-    </div>
-  );
+      {leadToAssign && (
+        <AssignLeadDialog
+          open={!!leadToAssign}
+          onClose={() => setLeadToAssign(null)}
+          lead={leadToAssign}
+          consultants={consultants}
+          onSuccess={fetchLeads}
+        />
+      )}
+    </div>
+  );
 };
 
 export default AdminDashboard;
