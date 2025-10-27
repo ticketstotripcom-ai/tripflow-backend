@@ -24,7 +24,8 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate("/dashboard"); // or your preferred dashboard route
+      // Go directly to analytics view to show charts/graphs
+      navigate("/dashboard?view=analytics");
     }
   };
 
