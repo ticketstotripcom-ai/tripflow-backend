@@ -165,8 +165,8 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lead Details - {lead.travellerName}</DialogTitle>
         </DialogHeader>

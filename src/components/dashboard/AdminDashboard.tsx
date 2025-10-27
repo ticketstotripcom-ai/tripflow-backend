@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { LeadCard } from "./LeadCard";
+import ProgressiveList from "@/components/ProgressiveList";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -93,13 +94,16 @@ const AdminDashboard = () => {
     fetchLeads();
   }, []);
 
-  // Silent background sync every 30 seconds without navigation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLeads(true); // Silent sync
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Silent background sync honoring cache TTL to avoid extra fetches
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cached = stateManager.getCachedLeads();
+      if (!cached.isValid) {
+        fetchLeads(true); // Silent sync only when cache is stale
+      }
+    }, 15000); // check more frequently but fetch only if stale
+    return () => clearInterval(interval);
+  }, []);
 
   // Get unique consultants
   const consultants = useMemo(() => {
@@ -272,21 +276,26 @@ const AdminDashboard = () => {
       );
     }
 
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {leadsToRender.map((lead, index) => (
-          <LeadCard
-            key={`${lead.tripId}-${index}`} 
-            lead={lead} 
-            onClick={() => setSelectedLead(lead)}
-            onAssign={() => setLeadToAssign(lead)}
-            showAssignButton={true}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        ))}
-      </div>
-    );
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <ProgressiveList
+          items={leadsToRender}
+          batchSize={24}
+          initialBatches={2}
+          renderItem={(lead, index) => (
+            <LeadCard
+              key={`${lead.tripId}-${index}`}
+              lead={lead}
+              onClick={() => setSelectedLead(lead)}
+              onAssign={() => setLeadToAssign(lead as any)}
+              showAssignButton={true}
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
+            />
+          )}
+        />
+      </div>
+    );
   };
 
   return (
