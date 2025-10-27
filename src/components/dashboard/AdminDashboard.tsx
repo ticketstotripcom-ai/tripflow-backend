@@ -14,6 +14,7 @@ import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
+import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus } from "@/lib/leadStatus";
 
 const AdminDashboard = () => {
   const location = useLocation();
@@ -114,7 +115,9 @@ const AdminDashboard = () => {
         lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.phone.includes(searchQuery);
       
-      const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "All Statuses" ||
+        normalizeStatus(lead.status) === normalizeStatus(statusFilter);
       const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
       const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
       const matchesConsultant = consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
@@ -141,28 +144,16 @@ const AdminDashboard = () => {
   );
 
   // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
-  const workingLeads = useMemo(() =>
-    filteredLeads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      return (
-        status.includes("follow-up") ||
-        status.includes("working") ||
-        status.includes("whatsapp") ||
-        status.includes("proposal") ||
-        status.includes("negotiations") ||
-        status.includes("hot")
-      );
-    }),
-    [filteredLeads]
-  );
+  const workingLeads = useMemo(() =>
+    filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)),
+    [filteredLeads]
+  );
 
   // ✅ BOOKED LEADS: booked with us
-  const bookedLeads = useMemo(() =>
-    filteredLeads.filter(lead =>
-      (lead.status || "").toLowerCase().includes("booked with us")
-    ),
-    [filteredLeads]
-  );
+  const bookedLeads = useMemo(() =>
+    filteredLeads.filter(lead => isBookedStatus(lead.status)),
+    [filteredLeads]
+  );
 
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {

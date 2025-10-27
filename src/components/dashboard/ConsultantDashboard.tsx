@@ -14,6 +14,7 @@ import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
+import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isNewCategoryStatus } from "@/lib/leadStatus";
 
 const ConsultantDashboard = () => {
   const location = useLocation();
@@ -109,14 +110,16 @@ const ConsultantDashboard = () => {
   }, []);
 
   // Filter and search logic
-  const filteredLeads = useMemo(() => {
+  const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
       const matchesSearch = !searchQuery || 
         lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.phone.includes(searchQuery);
       
-      const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "All Statuses" ||
+        normalizeStatus(lead.status) === normalizeStatus(statusFilter);
       const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
       const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
       
@@ -125,28 +128,17 @@ const ConsultantDashboard = () => {
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
 
   // Categorize leads by status
-  const newLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('unfollowed') || 
-      lead.status.toLowerCase().includes('follow-up')
-    ), [filteredLeads]
-  );
+  const newLeads = useMemo(() => 
+    filteredLeads.filter(lead => isNewCategoryStatus(lead.status) || normalizeStatus(lead.status).includes('follow-up')), [filteredLeads]
+  );
 
-  const workingLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('working') || 
-      lead.status.toLowerCase().includes('whatsapp') ||
-      lead.status.toLowerCase().includes('proposal') ||
-      lead.status.toLowerCase().includes('negotiations') ||
-      lead.status.toLowerCase().includes('hot')
-    ), [filteredLeads]
-  );
+  const workingLeads = useMemo(() => 
+    filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)), [filteredLeads]
+  );
 
-  const bookedLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('booked with us')
-    ), [filteredLeads]
-  );
+  const bookedLeads = useMemo(() => 
+    filteredLeads.filter(lead => isBookedStatus(lead.status)), [filteredLeads]
+  );
 
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
