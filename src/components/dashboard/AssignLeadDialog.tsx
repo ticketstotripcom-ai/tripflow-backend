@@ -81,6 +81,7 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
           : `Lead assigned to ${selectedConsultant}`,
       });
 
+      // Ensure dashboard reloads from source rather than cache
       onSuccess();
       onClose();
     } catch (error: any) {

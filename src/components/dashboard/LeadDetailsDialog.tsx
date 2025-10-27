@@ -13,10 +13,11 @@ import { Bell } from "lucide-react";
 import ReminderDialog from "./ReminderDialog";
 
 interface LeadDetailsDialogProps {
-  lead: SheetLead;
-  open: boolean;
-  onClose: () => void;
-  onUpdate: () => void;
+  lead: SheetLead;
+  open: boolean;
+  onClose: () => void;
+  onUpdate: () => void;
+  onImmediateUpdate?: (updatedLead: SheetLead) => void;
 }
 
 const LEAD_STATUSES = [
@@ -93,7 +94,7 @@ function sanitizeText(str: string = "") {
   return str.replace(/[\u0000-\u001F\u007F-\u009F]/g,"");
 }
 
-const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogProps) => {
+const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }: LeadDetailsDialogProps) => {
   const [formData, setFormData] = useState<SheetLead>({
     ...lead,
     travelDate: dateToDDMMYYYY(lead.travelDate),
@@ -121,13 +122,13 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
     setCalendarOpen(false);
   };
 
-  const handleSave = async () => {
+  const handleSave = async () => {
     if (!formData.travelDate || !/^\d{2}\/\d{2}\/\d{4}$/.test(formData.travelDate)) {
       setDateError("Please select or enter a valid date (dd/mm/yyyy).");
       toast({ variant: "destructive", title: "❌ Invalid date format", description: "Use or pick dd/mm/yyyy (e.g., 25/10/2025)", duration: 4000 });
       return;
     }
-    try {
+    try {
       setSaving(true);
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Google Sheets credentials not configured.');
@@ -139,15 +140,22 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
       });
-      const dataToSave = {
+      const dataToSave = {
         ...formData,
         travelDate: `${formData.travelDate.split("/")[1]}/${formData.travelDate.split("/")[0]}/${formData.travelDate.split("/")[2]}`, // mm/dd/yyyy for Sheets
         remarks: sanitizeText(formData.remarks),
         notes: sanitizeText(formData.notes)
       };
-      await sheetsService.updateLead(lead, dataToSave);
+      // Optimistically update UI immediately
+      const optimisticLead: SheetLead = {
+        ...lead,
+        ...formData,
+      };
+      onImmediateUpdate?.(optimisticLead);
+      await sheetsService.updateLead(lead, dataToSave);
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
-      onUpdate();
+      // Ask parent to force refresh so the updated lead reflects immediately
+      onUpdate();
       onClose();
     } catch (error: any) {
       toast({ variant: "destructive", title: "❌ Failed to update lead", description: error.message || "Unknown error occurred.", duration: 5000 });

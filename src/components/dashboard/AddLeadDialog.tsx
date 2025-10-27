@@ -15,6 +15,7 @@ interface AddLeadDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onImmediateAdd?: (lead: Partial<SheetLead>) => void;
 }
 
 const LEAD_STATUSES = [
@@ -40,7 +41,7 @@ const MEAL_PLANS = [
   { value: "All Meal with High Tea", label: "All Meal with High Tea" },
 ];
 
-const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
+const AddLeadDialog = ({ open, onClose, onSuccess, onImmediateAdd }: AddLeadDialogProps) => {
   const [formData, setFormData] = useState({
     tripId: "",
     travellerName: "",
@@ -79,7 +80,7 @@ const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
         columnMappings: credentials.columnMappings
       });
       
-      await sheetsService.appendLead({
+      const newLead: Partial<SheetLead> = {
         // No tripId - column A stays empty for new leads
         date: new Date().toISOString().split('T')[0],
         consultant: session?.user.name || '',
@@ -94,7 +95,12 @@ const AddLeadDialog = ({ open, onClose, onSuccess }: AddLeadDialogProps) => {
         mealPlan: formData.mealPlan,
         phone: formData.phone,
         email: formData.email,
-      } as any);
+      } as any;
+
+      // Optimistically show new lead in UI immediately
+      onImmediateAdd?.(newLead);
+
+      await sheetsService.appendLead(newLead as any);
 
       toast({
         title: "Lead added successfully",
