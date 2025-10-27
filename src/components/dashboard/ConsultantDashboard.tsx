@@ -314,7 +314,7 @@ const ConsultantDashboard = () => {
                 ? { ...l, ...updated }
                 : l
             ));
-          })}
+          }}
         />
       )}
 
