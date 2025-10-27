@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
-import { useState, useEffect } from "react"; // 👈 IMPORT useEffect
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
@@ -16,7 +16,7 @@ interface LeadDetailsDialogProps {
   lead: SheetLead;
   open: boolean;
   onClose: () => void;
-  onUpdate: (updatedLead: SheetLead) => void; // 👈 CHANGED: Now passes the updated lead
+  onUpdate: () => void;
 }
 
 const LEAD_STATUSES = [
@@ -64,16 +64,10 @@ function prettyDateDisplay(dateStr: string) {
 function parseAnyDate(str: string): Date | undefined {
   if (!str) return undefined;
   let d: Date | undefined = undefined;
-  if (/^\d{1,2}\/\d{1,2}\/(\d{2,4})$/.test(str)) { // dd/mm/yyyy or mm/dd/yyyy
-    const parts = str.split("/");
-    const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-    // Ambiguous: Assume dd/mm/yyyy first if day > 12
-    if (Number(parts[0]) > 12) { // dd/mm/yyyy
-      d = new Date(Number(year), Number(parts[1])-1, Number(parts[0]));
-    } else { // Assume mm/dd/yyyy or dd/mm/yyyy (defaulting to mm/dd for US-centric JS)
-      // Let's favor dd/mm/yyyy as per your app's format
-      d = new Date(Number(year), Number(parts[1])-1, Number(parts[0]));
-    }
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) { // dd/mm/yyyy or mm/dd/yyyy
+    const [a, b, c] = str.split("/");
+    if (Number(a) > 12) d = new Date(Number(c), Number(b)-1, Number(a));
+    else d = new Date(Number(c), Number(a)-1, Number(b));
   } else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) { // yyyy-mm-dd
     d = new Date(str);
   } else if (/^[0-9]{1,2}-[A-Za-z]+-\d{2,4}$/.test(str)) { // 25-December-2025
@@ -88,7 +82,7 @@ function parseAnyDate(str: string): Date | undefined {
 }
 function dateToDDMMYYYY(date: Date | string | undefined): string {
   if (!date) return "";
-  let d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date(0); // Use epoch on fail
+  let d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date();
   if (isNaN(d.getTime())) return "";
   const dd = String(d.getDate()).padStart(2,'0');
   const mm = String(d.getMonth()+1).padStart(2,'0');
@@ -109,18 +103,6 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const [dateError, setDateError] = useState<string>("");
   const { toast } = useToast();
-
-  // 👈 ADDED: This effect syncs the form data when the lead prop changes
-  useEffect(() => {
-    if (open) { // Only reset when the dialog is opening/visible
-      setFormData({
-        ...lead,
-        travelDate: dateToDDMMYYYY(lead.travelDate),
-      });
-      setDateError(""); // Reset any validation errors
-      setCalendarOpen(false); // Close the calendar
-    }
-  }, [lead, open]); // Re-run this logic if the 'lead' or 'open' prop changes
 
   const handleDateChange = (rawVal: string) => {
     const normalized = dateToDDMMYYYY(parseAnyDate(rawVal) || rawVal);
@@ -165,10 +147,8 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
       };
       await sheetsService.updateLead(lead, dataToSave);
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
-      
-      // 👈 CHANGED: Pass the updated form data back to the parent
-      onUpdate(formData); 
-    s   onClose();
+      onUpdate();
+      onClose();
     } catch (error: any) {
       toast({ variant: "destructive", title: "❌ Failed to update lead", description: error.message || "Unknown error occurred.", duration: 5000 });
     } finally {
@@ -192,7 +172,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate }: LeadDetailsDialogP
             <div className="space-y-2">
               <Label>Date</Label>
               <Input value={formData.dateAndTime} readOnly className="bg-muted" />
-NOT       </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -262,7 +242,7 @@ NOT       </div>
                 </Button>
               </div>
               {calendarOpen && (
-      _           <Calendar
+                <Calendar
                   mode="single"
                   selected={parseAnyDate(formData.travelDate) || undefined}
                   onSelect={handleCalendarChange}
@@ -271,10 +251,10 @@ NOT       </div>
                 />
               )}
               {dateError && <p className="text-xs text-red-500">{dateError}</p>}
-              {!dateError && formData.travelDate && /^\d{2}\/\d{2}\/\d{4}$/.test(formData.travelDate) && (
+              {!dateError && formData.travelDate && (
                 <p className="text-xs text-green-600">✓ {prettyDateDisplay(formData.travelDate)}</p>
               )}
-        _   </div>
+            </div>
             <div className="space-y-2">
               <Label>Travel State</Label>
               <Input 
@@ -288,14 +268,14 @@ NOT       </div>
             <div className="space-y-2">
               <Label>Nights</Label>
               <Input 
-                value={formData.nights}s  
+                value={formData.nights} 
                 onChange={(e) => setFormData({ ...formData, nights: e.target.value })}
               />
             </div>
             <div className="space-y-2">
               <Label>Pax</Label>
               <Input 
-                value={formData.pax}s  
+                value={formData.pax} 
                 onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
               />
             </div>
@@ -303,14 +283,14 @@ NOT       </div>
               <Label>Meal Plan</Label>
               <Select
                 value={formData.mealPlan || ""}
-s               onValueChange={value => setFormData({ ...formData, mealPlan: value })}
+                onValueChange={value => setFormData({ ...formData, mealPlan: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Meal Plan" />
                 </SelectTrigger>
                 <SelectContent>
                   {MEAL_PLANS.map((plan) => (
-s                   <SelectItem key={plan} value={plan}>{plan}</SelectItem>
+                    <SelectItem key={plan} value={plan}>{plan}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -325,12 +305,12 @@ s                   <SelectItem key={plan} value={plan}>{plan}</SelectI
             >
               <SelectTrigger>
                 <SelectValue />
-  s           </SelectTrigger>
+              </SelectTrigger>
               <SelectContent>
                 {HOTEL_CATEGORIES.map((category) => (
                   <SelectItem key={category} value={category}>
                     {category}
-    s             </SelectItem>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -339,7 +319,7 @@ s                   <SelectItem key={plan} value={plan}>{plan}</SelectI
           <div className="space-y-2">
             <Label>Remarks</Label>
             <Textarea 
-              value={formData.remarks}s  
+              value={formData.remarks} 
               onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
               rows={4}
             />
@@ -347,7 +327,7 @@ s                   <SelectItem key={plan} value={plan}>{plan}</SelectI
 
           {formData.notes && (
             <div className="space-y-2">
-s             <Label>Cell Notes (Column K)</Label>
+              <Label>Cell Notes (Column K)</Label>
               <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
                 <p className="text-sm whitespace-pre-wrap">{formData.notes}</p>
               </div>
@@ -361,7 +341,7 @@ s             <Label>Cell Notes (Column K)</Label>
                 <p className="text-sm text-muted-foreground">No notes found for this lead</p>
               </div>
             </div>
-    </div>
+          )}
 
           {formData.remarkHistory && formData.remarkHistory.length > 0 && (
             <div className="space-y-2">
@@ -373,7 +353,7 @@ s             <Label>Cell Notes (Column K)</Label>
                   </div>
                 ))}
               </div>
-s           </div>
+            </div>
           )}
 
           <div className="border-t pt-4">
@@ -389,7 +369,7 @@ s           </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-i           <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saving || !!dateError}>
