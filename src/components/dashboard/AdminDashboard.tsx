@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LeadDetailsDialog from "./LeadDetailsDialog";
+import ReminderDialog from "./ReminderDialog";
 import AddLeadDialog from "./AddLeadDialog";
 import AssignLeadDialog from "./AssignLeadDialog";
 import LeadFilters from "./LeadFilters";
@@ -23,7 +24,9 @@ const AdminDashboard = () => {
   const isAnalyticsOnly = viewParam === 'analytics';
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [reminderLead, setReminderLead] = useState<{ id: string; name: string } | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
@@ -215,6 +218,7 @@ const AdminDashboard = () => {
     [filteredLeads]
   );
 
+  // Left swipe = mark cancellation
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
       const credentials = await secureStorage.getCredentials();
@@ -231,32 +235,32 @@ const AdminDashboard = () => {
       // Optimistic UI update
       setLeads((prev) => prev.map((l) =>
         l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
-          ? { ...l, status: 'Converted' }
+          ? { ...l, status: 'Cancellations' }
           : l
       ));
 
-      await sheetsService.updateLead(lead, { status: 'Converted' });
-      toast({
-        title: "Lead Converted!",
-        description: `${lead.travellerName} marked as booked.`,
-      });
+      await sheetsService.updateLead(lead, { status: 'Cancellations' });
+      toast({
+        title: "Lead moved to Cancellations",
+        description: `${lead.travellerName} moved to cancellations.`,
+      });
       // Force refresh to bypass cached leads so UI stays consistent
       fetchLeads(false, true);
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Failed to convert lead",
+        title: "Failed to cancel lead",
         description: error.message,
       });
     }
   };
 
-  const handleSwipeRight = (lead: SheetLead) => {
-    toast({
-      title: "Reminder Set!",
-      description: `Reminder created for ${lead.travellerName}`,
-    });
-  };
+  // Right swipe = open reminder dialog directly
+  const handleSwipeRight = (lead: SheetLead) => {
+    setReminderLead({ id: lead.tripId, name: lead.travellerName });
+    setShowReminderDialog(true);
+    toast({ title: "Reminder", description: `Add reminder for ${lead.travellerName}` });
+  };
 
   const renderLeadGrid = (leadsToRender: SheetLead[]) => {
     if (loading) {
@@ -407,6 +411,19 @@ const AdminDashboard = () => {
           }}
         />
       )}
+
+      {showReminderDialog && reminderLead && (
+        <ReminderDialog
+          open={showReminderDialog}
+          onClose={() => setShowReminderDialog(false)}
+          leadTripId={reminderLead.id}
+          leadName={reminderLead.name}
+          onReminderSet={() => {
+            setShowReminderDialog(false);
+            toast({ title: 'Reminder Set', description: `Reminder created for ${reminderLead.name}` });
+          }}
+        />
+      )}
 
       {showAddDialog && (
         <AddLeadDialog
