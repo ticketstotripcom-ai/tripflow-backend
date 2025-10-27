@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import BottomNavigation from "@/components/BottomNavigation";
 import { authService } from "@/lib/authService";
 import { notificationService } from "@/lib/notificationService";
 import { themeService } from "@/lib/themeService";
@@ -56,7 +57,7 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <div>
+          <div className="pb-24 sm:pb-20">
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
@@ -65,6 +66,7 @@ const App = () => {
               <Route path="/404" element={<NotFound />} />
               <Route path="*" element={<Navigate to="/404" replace />} />
             </Routes>
+            <BottomNavigation />
           </div>
         </BrowserRouter>
       </TooltipProvider>
