@@ -65,6 +65,8 @@ class AuthService {
 
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey || '',
+        // Pass service account too so auth works without an API key
+        serviceAccountJson: credentials.googleServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings

@@ -134,12 +134,15 @@ export class GoogleSheetsService {
 
     let url: string;
     let headers: Record<string, string> = {};
-    if (this.config.apiKey) {
-      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
-    } else {
+    // Prefer service account if available (works for private sheets)
+    if (this.config.serviceAccountJson) {
       const token = await this.getAccessToken();
       url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
       headers['Authorization'] = `Bearer ${token}`;
+    } else if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+    } else {
+      throw new Error('Missing credentials: provide Service Account JSON or API Key');
     }
 
     const response = await fetch(url, { headers });
@@ -150,13 +153,13 @@ export class GoogleSheetsService {
 
     return rows
       .map((row: any[]) => ({
-        name: row[this.columnToIndex(cm.name || 'C')] || '',
-        email: row[this.columnToIndex(cm.email || 'D')] || '',
-        phone: row[this.columnToIndex(cm.phone || 'E')] || '',
-        role: (row[this.columnToIndex(cm.role || 'M')] || 'consultant').toLowerCase() as
-          | 'admin'
-          | 'consultant',
-        password: row[this.columnToIndex(cm.password || 'N')] || '',
+        name: String(row[this.columnToIndex(cm.name || 'C')] || '').trim(),
+        email: String(row[this.columnToIndex(cm.email || 'D')] || '').trim(),
+        phone: String(row[this.columnToIndex(cm.phone || 'E')] || '').trim(),
+        role: String(row[this.columnToIndex(cm.role || 'M')] || 'consultant')
+          .toLowerCase()
+          .trim() as 'admin' | 'consultant',
+        password: String(row[this.columnToIndex(cm.password || 'N')] || '').trim(),
       }))
       .filter((u) => u.email && u.password);
   }
@@ -178,12 +181,15 @@ export class GoogleSheetsService {
 
     let url: string;
     let headers: Record<string, string> = {};
-    if (this.config.apiKey) {
-      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
-    } else {
+    // Prefer service account if available (works for private sheets)
+    if (this.config.serviceAccountJson) {
       const token = await this.getAccessToken();
       url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
       headers['Authorization'] = `Bearer ${token}`;
+    } else if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+    } else {
+      throw new Error('Missing credentials: provide Service Account JSON or API Key');
     }
 
     const response = await fetch(url, { headers });
@@ -199,11 +205,13 @@ export class GoogleSheetsService {
     let actualRowNumbers: number[] = [];
     try {
       // Use the spreadsheet.get API to get row data with metadata
-      const metadataUrl = this.config.apiKey
-        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue&key=${this.config.apiKey}`
-        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue`;
-      
-      const metadataHeaders = this.config.apiKey ? {} : { Authorization: `Bearer ${await this.getAccessToken()}` };
+      const metadataUrl = this.config.serviceAccountJson
+        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue`
+        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue&key=${this.config.apiKey}`;
+
+      const metadataHeaders = this.config.serviceAccountJson
+        ? { Authorization: `Bearer ${await this.getAccessToken()}` }
+        : {};
       const metadataResponse = await fetch(metadataUrl, { headers: metadataHeaders });
       
       if (metadataResponse.ok) {
@@ -228,15 +236,17 @@ export class GoogleSheetsService {
     // Optional notes
     let notesMap: Record<number, string> = {};
     try {
-      const notesUrl = this.config.apiKey
+      const notesUrl = this.config.serviceAccountJson
         ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
             worksheetName
-          )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`
+          )}!K2:K10000&fields=sheets.data.rowData.values.note`
         : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
             worksheetName
-          )}!K2:K10000&fields=sheets.data.rowData.values.note`;
+          )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`;
 
-      const notesHeaders = this.config.apiKey ? {} : { Authorization: `Bearer ${await this.getAccessToken()}` };
+      const notesHeaders = this.config.serviceAccountJson
+        ? { Authorization: `Bearer ${await this.getAccessToken()}` }
+        : {};
       const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
       if (notesResponse.ok) {
         const notesData = await notesResponse.json();
