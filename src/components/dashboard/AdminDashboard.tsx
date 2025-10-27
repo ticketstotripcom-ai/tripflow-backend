@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react"; // 👈 ADDED useCallback
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
@@ -88,19 +88,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // 🚀 NEW: Function to update the lead state locally
-  const handleLeadUpdate = useCallback((updatedLead: SheetLead) => {
-    setLeads(currentLeads => {
-      const updatedLeads = currentLeads.map(lead =>
-        lead.tripId === updatedLead.tripId ? updatedLead : lead
-      );
-      stateManager.setCachedLeads(updatedLeads); // Update cache too
-      return updatedLeads;
-    });
-    setSelectedLead(updatedLead); // Keep the dialog's reference up to date
-  }, []);
-
-
   useEffect(() => {
     fetchLeads();
   }, []);
@@ -178,9 +165,6 @@ const AdminDashboard = () => {
   );
 
   const handleSwipeLeft = async (lead: SheetLead) => {
-    // ... (omitted for brevity, as this should force a refetch or use handleLeadUpdate)
-    // For a swipe, a full refetch is often acceptable since it's a big status change.
-    // But you could also manually update the lead status here.
     try {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Credentials not found');
@@ -193,12 +177,12 @@ const AdminDashboard = () => {
         columnMappings: credentials.columnMappings
       });
 
-      await sheetsService.updateLead(lead, { status: 'Booked With Us' }); // Changed to match your status list
+      await sheetsService.updateLead(lead, { status: 'Converted' });
       toast({
         title: "Lead Converted!",
         description: `${lead.travellerName} marked as booked.`,
       });
-      fetchLeads(false, true); // Force a refresh since status changes tabs
+      fetchLeads();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -252,10 +236,56 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-3 sm:space-y-6">
-      {/* ... rest of the component is unchanged ... */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">All Leads</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign leads to consultants</p>
+        </div>
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
+          <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Add Lead</span>
+          </Button>
+          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+        </div>
+      </div>
+
+      <SearchBar value={searchQuery} onChange={(query) => {
+        setSearchQuery(query);
+        stateManager.setSearchQuery(query);
+      }} />
+
+      <LeadFilters
+        statusFilter={statusFilter}
+        priorityFilter={priorityFilter}
+        dateFilter={dateFilter}
+        consultantFilter={consultantFilter}
+        onStatusChange={(val) => {
+          setStatusFilter(val);
+          stateManager.setFilters({ statusFilter: val });
+        }}
+        onPriorityChange={(val) => {
+          setPriorityFilter(val);
+          stateManager.setFilters({ priorityFilter: val });
+        }}
+        onDateFilterChange={(val) => {
+          setDateFilter(val);
+          stateManager.setFilters({ dateFilter: val });
+        }}
+        onConsultantChange={(val) => {
+          setConsultantFilter(val);
+          stateManager.setFilters({ consultantFilter: val });
+        }}
+        consultants={consultants}
+        showConsultantFilter={true}
+      />
 
       {isAnalyticsOnly ? (
         <div className="space-y-6">
+          {/* ✅ ONLY DashboardStats - Removed KeyMetricsCards */}
           <DashboardStats leads={leads} />
         </div>
       ) : (
@@ -294,7 +324,7 @@ const AdminDashboard = () => {
           lead={selectedLead}
           open={!!selectedLead}
           onClose={() => setSelectedLead(null)}
-          onUpdate={handleLeadUpdate} {/* 👈 UPDATED TO INSTANT LOCAL UPDATE */}
+          onUpdate={fetchLeads}
         />
       )}
 
@@ -302,7 +332,7 @@ const AdminDashboard = () => {
         <AddLeadDialog
           open={showAddDialog}
           onClose={() => setShowAddDialog(false)}
-          onSuccess={() => fetchLeads(false, true)} // A full refresh is fine for adding a lead
+          onSuccess={fetchLeads}
         />
       )}
 
@@ -312,7 +342,7 @@ const AdminDashboard = () => {
           onClose={() => setLeadToAssign(null)}
           lead={leadToAssign}
           consultants={consultants}
-          onSuccess={() => fetchLeads(false, true)} // A full refresh is needed if consultant changes
+          onSuccess={fetchLeads}
         />
       )}
     </div>
