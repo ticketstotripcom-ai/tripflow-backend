@@ -4,6 +4,7 @@ import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { secureStorage } from "@/lib/secureStorage";
 import { LeadCard } from "./LeadCard";
+import ProgressiveList from "@/components/ProgressiveList";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -101,13 +102,16 @@ const ConsultantDashboard = () => {
     fetchLeads();
   }, []);
 
-  // Silent background sync every 30 seconds without navigation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLeads(true); // Silent sync
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Silent background sync honoring cache TTL to avoid extra fetches
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cached = stateManager.getCachedLeads();
+      if (!cached.isValid) {
+        fetchLeads(true); // Silent sync only when cache is stale
+      }
+    }, 15000); // check more frequently but fetch only if stale
+    return () => clearInterval(interval);
+  }, []);
 
   // Filter and search logic
   const filteredLeads = useMemo(() => {
@@ -162,12 +166,20 @@ const ConsultantDashboard = () => {
         priorityFilter === "All Priorities" ||
         (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
       const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+
+      // EXTRA SCOPE ENFORCEMENT: If consultant tries to search another
+      // consultant's trip id or phone, do not reveal that record.
+      // We already pre-filter `leads` to only include the current consultant,
+      // but this explicitly guards any accidental leakage via search.
+      const assignedToSelf = !!(lead.consultant && session?.user?.name &&
+        lead.consultant.toLowerCase().includes(session.user.name.toLowerCase()));
       
       return (
         matchesSearch &&
         matchesStatus &&
         matchesPriority &&
-        matchesDate
+        matchesDate &&
+        assignedToSelf
       );
     });
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
@@ -250,19 +262,24 @@ const ConsultantDashboard = () => {
       );
     }
 
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {leadsToRender.map((lead, index) => (
-          <LeadCard
-            key={`${lead.tripId}-${index}`} 
-            lead={lead} 
-            onClick={() => setSelectedLead(lead)}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        ))}
-      </div>
-    );
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <ProgressiveList
+          items={leadsToRender}
+          batchSize={24}
+          initialBatches={2}
+          renderItem={(lead, index) => (
+            <LeadCard
+              key={`${lead.tripId}-${index}`}
+              lead={lead}
+              onClick={() => setSelectedLead(lead)}
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
+            />
+          )}
+        />
+      </div>
+    );
   };
 
   return (
