@@ -109,23 +109,68 @@ const ConsultantDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter and search logic
+  // Filter and search logic
   const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const matchesSearch = !searchQuery || 
-        lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery);
-      
+    const queryLower = (searchQuery || '').toLowerCase();
+    const queryDigits = (searchQuery || '').replace(/\D+/g, '');
+
+    const matchesQuery = (lead: SheetLead): boolean => {
+      if (!searchQuery) return true;
+
+      const textFields = [
+        lead.tripId,
+        lead.travellerName,
+        lead.phone,
+        lead.email,
+        lead.consultant,
+        lead.status,
+        lead.priority || '',
+        lead.travelDate,
+        lead.travelState,
+        lead.remarks,
+        lead.nights,
+        lead.pax,
+        lead.hotelCategory,
+        lead.mealPlan,
+        lead.dateAndTime,
+        lead.notes || ''
+      ];
+
+      if (textFields.some(v => String(v || '').toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      if (queryDigits) {
+        const anyDigitsHit = textFields.some(v => String(v || '').replace(/\D+/g, '').includes(queryDigits));
+        if (anyDigitsHit) return true;
+      }
+
+      if ((lead.remarkHistory || []).some(r => String(r).toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      return false;
+    };
+
+    return leads.filter(lead => {
+      const matchesSearch = matchesQuery(lead);
+
       const matchesStatus =
         statusFilter === "All Statuses" ||
         normalizeStatus(lead.status) === normalizeStatus(statusFilter);
-      const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
-      
-      return matchesSearch && matchesStatus && matchesPriority && matchesDate;
-    });
-  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
+      const matchesPriority =
+        priorityFilter === "All Priorities" ||
+        (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
+      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+      
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesDate
+      );
+    });
+  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
 
   // Categorize leads by status
   const newLeads = useMemo(() => 
@@ -262,9 +307,9 @@ const ConsultantDashboard = () => {
         }}
       />
 
-      {isAnalyticsOnly ? (
+      {isAnalyticsOnly ? (
         <div className="space-y-6">
-          <DashboardStats leads={leads} />
+          <DashboardStats leads={filteredLeads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {

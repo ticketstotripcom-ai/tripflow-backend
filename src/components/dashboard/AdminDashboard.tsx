@@ -107,24 +107,74 @@ const AdminDashboard = () => {
     return uniqueConsultants;
   }, [leads]);
 
-  // Filter and search logic
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const matchesSearch = !searchQuery || 
-        lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery);
-      
+  // Filter and search logic
+  const filteredLeads = useMemo(() => {
+    const queryLower = (searchQuery || '').toLowerCase();
+    const queryDigits = (searchQuery || '').replace(/\D+/g, '');
+
+    const matchesQuery = (lead: SheetLead): boolean => {
+      if (!searchQuery) return true;
+
+      const textFields = [
+        lead.tripId,
+        lead.travellerName,
+        lead.phone,
+        lead.email,
+        lead.consultant,
+        lead.status,
+        lead.priority || '',
+        lead.travelDate,
+        lead.travelState,
+        lead.remarks,
+        lead.nights,
+        lead.pax,
+        lead.hotelCategory,
+        lead.mealPlan,
+        lead.dateAndTime,
+        lead.notes || ''
+      ];
+
+      // Plain text match across all fields
+      if (textFields.some(v => String(v || '').toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      // Digit-only matching (helps match numbers like phone/trip IDs regardless of formatting)
+      if (queryDigits) {
+        const anyDigitsHit = textFields.some(v => String(v || '').replace(/\D+/g, '').includes(queryDigits));
+        if (anyDigitsHit) return true;
+      }
+
+      // Search within remark history if present
+      if ((lead.remarkHistory || []).some(r => String(r).toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      return false;
+    };
+
+    return leads.filter(lead => {
+      const matchesSearch = matchesQuery(lead);
+
       const matchesStatus =
         statusFilter === "All Statuses" ||
         normalizeStatus(lead.status) === normalizeStatus(statusFilter);
-      const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
-      const matchesConsultant = consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
-      
-      return matchesSearch && matchesStatus && matchesPriority && matchesDate && matchesConsultant;
-    });
-  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
+      const matchesPriority =
+        priorityFilter === "All Priorities" ||
+        (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
+      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+      const matchesConsultant =
+        consultantFilter === "All Consultants" || lead.consultant === consultantFilter;
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesDate &&
+        matchesConsultant
+      );
+    });
+  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, consultantFilter]);
 
   // 🆕 NEW LEADS: blank or "unfollowed"
   const newLeads = useMemo(() =>
@@ -288,10 +338,10 @@ const AdminDashboard = () => {
         showConsultantFilter={true}
       />
 
-      {isAnalyticsOnly ? (
+      {isAnalyticsOnly ? (
         <div className="space-y-6">
-          {/* ✅ ONLY DashboardStats - Removed KeyMetricsCards */}
-          <DashboardStats leads={leads} />
+          {/* ✅ DashboardStats should respect current filters/search */}
+          <DashboardStats leads={filteredLeads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {
