@@ -32,6 +32,16 @@ All colors MUST be HSL.
     --accent: 280 70% 55%;
     --accent-foreground: 0 0% 100%;
 
+    /* Multicolor chart palette (light) */
+    --chart-1: 255 85% 62%; /* violet */
+    --chart-2: 210 90% 56%; /* blue */
+    --chart-3: 150 63% 45%; /* green */
+    --chart-4: 38 95% 55%;  /* orange */
+    --chart-5: 330 80% 60%; /* pink */
+    --chart-6: 280 70% 60%; /* purple */
+    --chart-7: 190 85% 52%; /* cyan */
+    --chart-8: 120 60% 48%; /* emerald */
+
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     
@@ -78,6 +88,16 @@ All colors MUST be HSL.
 
     --accent: 280 70% 60%;
     --accent-foreground: 0 0% 100%;
+
+    /* Multicolor chart palette (dark) */
+    --chart-1: 255 85% 70%;
+    --chart-2: 210 90% 65%;
+    --chart-3: 150 63% 55%;
+    --chart-4: 38 95% 60%;
+    --chart-5: 330 80% 68%;
+    --chart-6: 280 70% 68%;
+    --chart-7: 190 85% 60%;
+    --chart-8: 120 60% 58%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;

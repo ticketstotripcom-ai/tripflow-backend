@@ -1,6 +1,7 @@
 // Authentication service using BACKEND SHEET
 import { GoogleSheetsService, SheetUser } from './googleSheets';
 import { secureStorage } from './secureStorage';
+import { findLocalUserByIdentifier } from '@/config/login';
 
 export interface AuthUser {
   id: string;
@@ -57,6 +58,26 @@ class AuthService {
         return { session, error: null };
       }
 
+      // Check local users file next for easy login
+      const local = await findLocalUserByIdentifier(email, password);
+      if (local) {
+        const authUser: AuthUser = {
+          id: local.id,
+          email: local.email,
+          name: local.name,
+          phone: local.phone,
+          role: local.role
+        };
+        const session: AuthSession = {
+          user: authUser,
+          token: btoa(`${authUser.email}:${Date.now()}`),
+          timestamp: Date.now()
+        };
+        this.session = session;
+        await secureStorage.set(SESSION_KEY, JSON.stringify(session));
+        return { session, error: null };
+      }
+
       // Fetch users from BACKEND SHEET
       const credentials = await secureStorage.getCredentials();
       if (!credentials) {
@@ -65,6 +86,8 @@ class AuthService {
 
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey || '',
+        // Pass service account too so auth works without an API key
+        serviceAccountJson: credentials.googleServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings

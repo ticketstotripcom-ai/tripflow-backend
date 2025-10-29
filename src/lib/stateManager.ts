@@ -1,5 +1,6 @@
 // State persistence and caching for CRM
 import { SheetLead } from './googleSheets';
+import { secureStorage } from './secureStorage';
 
 interface AppState {
   // Dashboard state
@@ -20,6 +21,7 @@ interface AppState {
 
 const STATE_KEY = 'crm_app_state';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const PERSISTENT_LEADS_KEY = 'crm_persistent_leads_cache';
 
 class StateManager {
   private state: AppState = {
@@ -36,6 +38,10 @@ class StateManager {
 
   constructor() {
     this.loadState();
+    // Attempt to hydrate cached leads from device storage asynchronously
+    // so large datasets persist across app launches on mobile/web.
+    // Fire-and-forget; updates state when available.
+    this.hydratePersistentCache();
   }
 
   private loadState(): void {
@@ -55,6 +61,25 @@ class StateManager {
       localStorage.setItem(STATE_KEY, JSON.stringify(this.state));
     } catch (error) {
       console.error('Failed to save state:', error);
+    }
+  }
+
+  private async hydratePersistentCache(): Promise<void> {
+    try {
+      const stored = await secureStorage.get(PERSISTENT_LEADS_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { leads: SheetLead[]; lastFetchTime: number };
+      // Only hydrate if our in-memory cache is empty or older
+      if (
+        (!this.state.cachedLeads || this.state.cachedLeads.length === 0) ||
+        (parsed.lastFetchTime && parsed.lastFetchTime > this.state.lastFetchTime)
+      ) {
+        this.state.cachedLeads = parsed.leads || [];
+        this.state.lastFetchTime = parsed.lastFetchTime || 0;
+        this.saveState();
+      }
+    } catch (err) {
+      console.warn('Failed to hydrate persistent cache:', err);
     }
   }
 
@@ -115,11 +140,16 @@ class StateManager {
     this.state.cachedLeads = leads;
     this.state.lastFetchTime = Date.now();
     this.saveState();
+    // Persist large datasets to device storage for fast subsequent loads
+    secureStorage
+      .set(PERSISTENT_LEADS_KEY, JSON.stringify({ leads, lastFetchTime: this.state.lastFetchTime }))
+      .catch((e) => console.warn('Failed to persist leads cache:', e));
   }
 
   invalidateCache(): void {
     this.state.lastFetchTime = 0;
     this.saveState();
+    secureStorage.remove(PERSISTENT_LEADS_KEY).catch(() => {});
   }
 
   // Scroll positions
