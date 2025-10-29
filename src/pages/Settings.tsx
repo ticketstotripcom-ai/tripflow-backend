@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Upload } from "lucide-react";
+import { Save, Upload, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "@/lib/authService";
 import { secureStorage, SecureCredentials } from "@/lib/secureStorage";
+import { getLocalUsers, addLocalUser, deleteLocalUser, updateLocalUserRole, updateLocalUser, LocalUser } from "@/config/login";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Settings = () => {
   const [googleApiKey, setGoogleApiKey] = useState("");
@@ -36,6 +38,10 @@ const Settings = () => {
   ]);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [localUsers, setLocalUsers] = useState<LocalUser[]>([]);
+  const [newUser, setNewUser] = useState<{ name: string; email: string; phone: string; role: 'admin' | 'consultant'; password: string }>({
+    name: '', email: '', phone: '', role: 'consultant', password: '123456'
+  });
 
   useEffect(() => {
     const session = authService.getSession();
@@ -45,6 +51,7 @@ const Settings = () => {
     }
 
     loadCredentials();
+    loadLocalUsers();
   }, [navigate]);
 
   const loadCredentials = async () => {
@@ -57,6 +64,11 @@ const Settings = () => {
       setColumnMappings(credentials.columnMappings || columnMappings);
       setPaymentLinks(credentials.paymentLinks || paymentLinks);
     }
+  };
+
+  const loadLocalUsers = async () => {
+    const users = await getLocalUsers();
+    setLocalUsers(users);
   };
 
   const handleSave = async () => {
@@ -116,6 +128,35 @@ const Settings = () => {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleAddLocalUser = async () => {
+    if (!newUser.name || !newUser.email) {
+      toast({ variant: 'destructive', title: 'Missing details', description: 'Name and email are required' });
+      return;
+    }
+    const created = await addLocalUser(newUser);
+    setLocalUsers(prev => [...prev, created]);
+    setNewUser({ name: '', email: '', phone: '', role: 'consultant', password: '123456' });
+    toast({ title: 'User added', description: created.name });
+  };
+
+  const handleDeleteLocalUser = async (id: string) => {
+    await deleteLocalUser(id);
+    setLocalUsers(prev => prev.filter(u => u.id !== id));
+    toast({ title: 'User deleted' });
+  };
+
+  const handleChangeRole = async (id: string, role: 'admin' | 'consultant') => {
+    await updateLocalUserRole(id, role);
+    setLocalUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u));
+    toast({ title: 'Role updated' });
+  };
+
+  const handleInlineUpdate = async (user: LocalUser, field: keyof LocalUser, value: string) => {
+    const updated = { ...user, [field]: value } as LocalUser;
+    await updateLocalUser({ id: user.id, [field]: value } as any);
+    setLocalUsers(prev => prev.map(u => u.id === user.id ? updated : u));
   };
 
   return (
@@ -180,6 +221,74 @@ const Settings = () => {
               <p className="text-xs text-muted-foreground">
                 Required for adding/updating leads. Paste the entire JSON from your service account file.
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle>Local Users (Admin Only)</CardTitle>
+            <CardDescription>Manage quick local logins. Stored on this device.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v as any })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="consultant">Consultant</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Password</Label>
+                <Input type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
+              </div>
+            </div>
+            <Button className="gap-2" onClick={handleAddLocalUser}>
+              <Plus className="h-4 w-4" /> Add User
+            </Button>
+
+            <div className="border-t pt-4 space-y-3">
+              {localUsers.length === 0 && (
+                <p className="text-sm text-muted-foreground">No local users yet.</p>
+              )}
+              {localUsers.map(u => (
+                <div key={u.id} className="grid grid-cols-1 sm:grid-cols-6 gap-2 items-center">
+                  <Input value={u.name} onChange={(e) => handleInlineUpdate(u, 'name', e.target.value)} />
+                  <Input value={u.email} onChange={(e) => handleInlineUpdate(u, 'email', e.target.value)} />
+                  <Input value={u.phone} onChange={(e) => handleInlineUpdate(u, 'phone', e.target.value)} />
+                  <Select value={u.role} onValueChange={(v) => handleChangeRole(u.id, v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="consultant">Consultant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input type="password" value={u.password} onChange={(e) => handleInlineUpdate(u, 'password', e.target.value)} />
+                  <Button variant="destructive" className="gap-1" onClick={() => handleDeleteLocalUser(u.id)}>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

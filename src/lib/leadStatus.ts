@@ -12,6 +12,15 @@ export function isCancellationStatus(status: string | undefined | null): boolean
   );
 }
 
+export function isCancelCategoryStatus(status: string | undefined | null): boolean {
+  const s = normalizeStatus(status);
+  return (
+    isCancellationStatus(s) ||
+    s.includes("booked outside") ||
+    s.includes("postponed")
+  );
+}
+
 export function isBookedStatus(status: string | undefined | null): boolean {
   const s = normalizeStatus(status);
   return s.includes("booked with us") || s === "converted" || s.includes("converted");
@@ -25,8 +34,7 @@ export function isWorkingCategoryStatus(status: string | undefined | null): bool
     s.includes("whatsapp") ||
     s.includes("proposal") ||
     s.includes("negotiations") ||
-    s.includes("hot") ||
-    isCancellationStatus(s)
+    s.includes("hot")
   );
 }
 
