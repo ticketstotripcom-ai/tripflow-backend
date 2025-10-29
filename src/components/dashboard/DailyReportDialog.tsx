@@ -15,6 +15,7 @@ import { SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { isBookedStatus, isCancelCategoryStatus, isNewCategoryStatus, normalizeStatus } from "@/lib/leadStatus";
 import { Calendar, Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
+import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
 import { parseFlexibleDate, formatDisplayDate, extractAnyDateFromText } from "@/lib/dateUtils";
 
 type Mode = "consultant" | "admin";
@@ -187,6 +188,7 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<string>(() => toISODate(new Date()));
+  const [dateRange, setDateRange] = useState<DateRange>({});
   const [notes, setNotes] = useState<string>("");
   const [selectionMode, setSelectionMode] = useState<"me" | "full" | "custom">("me");
   const [selectedConsultants, setSelectedConsultants] = useState<Record<string, boolean>>({});
@@ -202,14 +204,27 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   }, [mode, consultants]);
 
   const selectedDay = useMemo(() => new Date(`${selectedDate}T00:00:00`), [selectedDate]);
+  const hasRange = !!dateRange.from || !!dateRange.to;
 
   const leadsForDay = useMemo(() => {
+    if (hasRange) {
+      const from = dateRange.from ? new Date(dateRange.from.setHours(0, 0, 0, 0)) : null;
+      const to = dateRange.to ? new Date(dateRange.to.setHours(23, 59, 59, 999)) : null;
+      return leads.filter((l) => {
+        const nd = extractAnyDateFromText(l.notes) || parseFlexibleDate(l.dateAndTime);
+        if (!nd) return false;
+        const t = nd.getTime();
+        if (from && t < from.getTime()) return false;
+        if (to && t > to.getTime()) return false;
+        return true;
+      });
+    }
     return leads.filter((l) => {
       const noteDate = extractAnyDateFromText(l.notes);
       if (noteDate) return sameDay(noteDate, selectedDay);
       return sameDay(parseFlexibleDate(l.dateAndTime), selectedDay);
     });
-  }, [leads, selectedDay]);
+  }, [leads, selectedDay, hasRange, dateRange]);
 
   const myName = session?.user?.name || "";
 
@@ -285,18 +300,19 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs">Date</Label>
+                <Label className="text-xs">Date or Range</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                    onChange={(e) => { setSelectedDate(e.target.value); setDateRange({}); }}
                     className="h-9"
                   />
-                  <Button variant="outline" size="icon" onClick={() => setSelectedDate(toISODate(new Date()))}>
+                  <Button variant="outline" size="icon" onClick={() => { setSelectedDate(toISODate(new Date())); setDateRange({}); }}>
                     <Calendar className="h-4 w-4" />
                   </Button>
                 </div>
+                <DateRangePicker value={dateRange} onChange={(r) => { setDateRange(r); }} />
               </div>
 
               {mode === "consultant" && (

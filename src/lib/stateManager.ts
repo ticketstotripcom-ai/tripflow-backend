@@ -154,6 +154,10 @@ class StateManager {
     secureStorage
       .set(PERSISTENT_LEADS_KEY, JSON.stringify({ leads, lastFetchTime: this.state.lastFetchTime }))
       .catch((e) => console.warn('Failed to persist leads cache:', e));
+    // Keep a localStorage copy for offline web contexts
+    try {
+      localStorage.setItem('crm_leads_cache_v1', JSON.stringify({ leads, lastFetchTime: this.state.lastFetchTime }));
+    } catch {}
   }
 
   invalidateCache(): void {
