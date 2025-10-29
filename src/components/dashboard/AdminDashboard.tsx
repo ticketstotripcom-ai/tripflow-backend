@@ -3,15 +3,18 @@ import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { LeadCard } from "./LeadCard";
+import ProgressiveList from "@/components/ProgressiveList";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, FileText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LeadDetailsDialog from "./LeadDetailsDialog";
+import ReminderDialog from "./ReminderDialog";
 import AddLeadDialog from "./AddLeadDialog";
 import AssignLeadDialog from "./AssignLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
+import DailyReportDialog from "./DailyReportDialog";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
 import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
@@ -22,9 +25,12 @@ const AdminDashboard = () => {
   const isAnalyticsOnly = viewParam === 'analytics';
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [reminderLead, setReminderLead] = useState<{ id: string; name: string } | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
+  const [showDailyReport, setShowDailyReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
   const savedFilters = stateManager.getFilters();
   const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
@@ -93,13 +99,16 @@ const AdminDashboard = () => {
     fetchLeads();
   }, []);
 
-  // Silent background sync every 30 seconds without navigation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLeads(true); // Silent sync
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Silent background sync honoring cache TTL to avoid extra fetches
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cached = stateManager.getCachedLeads();
+      if (!cached.isValid) {
+        fetchLeads(true); // Silent sync only when cache is stale
+      }
+    }, 15000); // check more frequently but fetch only if stale
+    return () => clearInterval(interval);
+  }, []);
 
   // Get unique consultants
   const consultants = useMemo(() => {
@@ -211,6 +220,7 @@ const AdminDashboard = () => {
     [filteredLeads]
   );
 
+  // Left swipe = mark cancellation
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
       const credentials = await secureStorage.getCredentials();
@@ -227,32 +237,32 @@ const AdminDashboard = () => {
       // Optimistic UI update
       setLeads((prev) => prev.map((l) =>
         l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
-          ? { ...l, status: 'Converted' }
+          ? { ...l, status: 'Cancellations' }
           : l
       ));
 
-      await sheetsService.updateLead(lead, { status: 'Converted' });
-      toast({
-        title: "Lead Converted!",
-        description: `${lead.travellerName} marked as booked.`,
-      });
+      await sheetsService.updateLead(lead, { status: 'Cancellations' });
+      toast({
+        title: "Lead moved to Cancellations",
+        description: `${lead.travellerName} moved to cancellations.`,
+      });
       // Force refresh to bypass cached leads so UI stays consistent
       fetchLeads(false, true);
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Failed to convert lead",
+        title: "Failed to cancel lead",
         description: error.message,
       });
     }
   };
 
-  const handleSwipeRight = (lead: SheetLead) => {
-    toast({
-      title: "Reminder Set!",
-      description: `Reminder created for ${lead.travellerName}`,
-    });
-  };
+  // Right swipe = open reminder dialog directly
+  const handleSwipeRight = (lead: SheetLead) => {
+    setReminderLead({ id: lead.tripId, name: lead.travellerName });
+    setShowReminderDialog(true);
+    toast({ title: "Reminder", description: `Add reminder for ${lead.travellerName}` });
+  };
 
   const renderLeadGrid = (leadsToRender: SheetLead[]) => {
     if (loading) {
@@ -272,21 +282,26 @@ const AdminDashboard = () => {
       );
     }
 
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {leadsToRender.map((lead, index) => (
-          <LeadCard
-            key={`${lead.tripId}-${index}`} 
-            lead={lead} 
-            onClick={() => setSelectedLead(lead)}
-            onAssign={() => setLeadToAssign(lead)}
-            showAssignButton={true}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        ))}
-      </div>
-    );
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <ProgressiveList
+          items={leadsToRender}
+          batchSize={24}
+          initialBatches={2}
+          renderItem={(lead, index) => (
+            <LeadCard
+              key={`${lead.tripId}-${index}`}
+              lead={lead}
+              onClick={() => setSelectedLead(lead)}
+              onAssign={() => setLeadToAssign(lead as any)}
+              showAssignButton={true}
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
+            />
+          )}
+        />
+      </div>
+    );
   };
 
   return (
@@ -296,11 +311,15 @@ const AdminDashboard = () => {
           <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">All Leads</h2>
           <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign leads to consultants</p>
         </div>
-        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
           <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
             <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
             <span>Add Lead</span>
           </Button>
+          <Button onClick={() => setShowDailyReport(true)} variant="secondary" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Daily Report</span>
+          </Button>
           <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
             <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -399,6 +418,19 @@ const AdminDashboard = () => {
         />
       )}
 
+      {showReminderDialog && reminderLead && (
+        <ReminderDialog
+          open={showReminderDialog}
+          onClose={() => setShowReminderDialog(false)}
+          leadTripId={reminderLead.id}
+          leadName={reminderLead.name}
+          onReminderSet={() => {
+            setShowReminderDialog(false);
+            toast({ title: 'Reminder Set', description: `Reminder created for ${reminderLead.name}` });
+          }}
+        />
+      )}
+
       {showAddDialog && (
         <AddLeadDialog
           open={showAddDialog}
@@ -443,6 +475,16 @@ const AdminDashboard = () => {
           onSuccess={() => fetchLeads(false, true)}
         />
       )}
+
+      {showDailyReport && (
+        <DailyReportDialog
+          open={showDailyReport}
+          onClose={() => setShowDailyReport(false)}
+          mode="admin"
+          leads={leads}
+          consultants={consultants}
+        />
+      )}
     </div>
   );
 };

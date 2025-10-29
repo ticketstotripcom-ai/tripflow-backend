@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, CheckCircle, Bell } from "lucide-react";
+import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, CheckCircle, Bell, XCircle } from "lucide-react";
 import { SheetLead } from "@/lib/googleSheets";
 import { useState } from "react";
 import { useSwipeable } from "react-swipeable";
@@ -116,7 +116,7 @@ const getStatusColor = (status: string): string => {
 export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, onSwipeLeft, onSwipeRight }: LeadCardProps) => {
   const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
-  const [isConverted, setIsConverted] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
   const [reminderSet, setReminderSet] = useState(false);
   const priority = lead.priority?.toLowerCase() || 'medium';
   const progress = getStatusProgress(lead.status);
@@ -128,9 +128,9 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
     },
     onSwipedLeft: () => {
       if (onSwipeLeft) {
-        setIsConverted(true);
+        setIsCancelled(true);
         onSwipeLeft(lead);
-        setTimeout(() => setIsConverted(false), 2000);
+        setTimeout(() => setIsCancelled(false), 2000);
       }
       setSwipeOffset(0);
     },
@@ -180,8 +180,8 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
         }}
       >
         {swipeOffset < -50 && (
-          <div className="absolute inset-y-0 right-0 flex items-center justify-center px-4 bg-green-500 text-white rounded-r-lg z-0">
-            <CheckCircle className="h-6 w-6" />
+          <div className="absolute inset-y-0 right-0 flex items-center justify-center px-4 bg-red-500 text-white rounded-r-lg z-0">
+            <XCircle className="h-6 w-6" />
           </div>
         )}
         {swipeOffset > 50 && (
@@ -190,9 +190,9 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           </div>
         )}
 
-        {isConverted && (
-          <div className="absolute top-2 right-2 z-10 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium animate-fade-in">
-            ✓ Converted!
+        {isCancelled && (
+          <div className="absolute top-2 right-2 z-10 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium animate-fade-in">
+            ✗ Cancelled
           </div>
         )}
         {reminderSet && (
