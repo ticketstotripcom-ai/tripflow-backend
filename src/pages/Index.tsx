@@ -1,36 +1,32 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { TrendingUp, ArrowRight } from "lucide-react";
 import { authService } from "@/lib/authService";
+import AdminDashboard from "@/components/dashboard/AdminDashboard";
+import ConsultantDashboard from "@/components/dashboard/ConsultantDashboard";
 
 const Index = () => {
   const navigate = useNavigate();
+  const [session, setSession] = useState(authService.getSession());
 
-  // Stay on Home even if authenticated; users can navigate via bottom navigation
+  useEffect(() => {
+    if (!authService.isAuthenticated()) {
+      navigate("/auth");
+    }
+  }, [navigate]);
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20 flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4 pt-20">
-      <div className="text-center space-y-8 max-w-2xl animate-fade-in">
-        <div className="inline-flex items-center gap-3 mb-4">
-          <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-glow">
-            <TrendingUp className="h-10 w-10 text-white" />
-          </div>
-        </div>
-        
-        <h1 className="text-5xl md:text-6xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Tickets To Trip
-        </h1>
-        
-        <p className="text-xl text-muted-foreground max-w-lg mx-auto">
-          Professional CRM for travel consultants. Manage leads, track conversations, and close deals faster.
-        </p>
-
-        <div className="flex gap-4 justify-center pt-4">
-          <Button size="lg" onClick={() => navigate("/auth")} className="shadow-soft">
-            Get Started <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20">
+      <main className="w-full px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
+        {session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />}
+      </main>
     </div>
   );
 };

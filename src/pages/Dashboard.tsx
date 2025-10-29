@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, Settings } from "lucide-react";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
@@ -14,12 +14,21 @@ const Dashboard = () => {
   const [session, setSession] = useState(authService.getSession());
   const [theme, setTheme] = useState(themeService.getTheme());
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
       navigate('/auth');
     }
   }, [navigate]);
+
+  // Ensure Dashboard renders analytics-only views of dashboards
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') !== 'analytics') {
+      navigate('/dashboard?view=analytics', { replace: true });
+    }
+  }, [location.search, navigate]);
 
   const handleLogout = async () => {
     await authService.logout();
