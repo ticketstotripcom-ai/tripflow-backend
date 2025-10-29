@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, ArrowRight } from "lucide-react";
@@ -7,12 +6,7 @@ import { authService } from "@/lib/authService";
 const Index = () => {
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Auto-redirect to dashboard if already authenticated
-    if (authService.isAuthenticated()) {
-      navigate("/dashboard?view=leads", { replace: true });
-    }
-  }, [navigate]);
+  // Stay on Home even if authenticated; users can navigate via bottom navigation
 
   return (
     <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4 pt-20">

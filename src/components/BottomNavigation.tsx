@@ -19,13 +19,12 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     navigate("/");
   };
 
-  // Dashboard: handle analytics tab or custom logic
+  // Dashboard
   const handleDashboard = () => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      // Go directly to analytics view to show charts/graphs
-      navigate("/dashboard?view=analytics");
+      navigate("/dashboard");
     }
   };
 
