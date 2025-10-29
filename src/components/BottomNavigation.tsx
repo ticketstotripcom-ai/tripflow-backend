@@ -24,37 +24,41 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate("/dashboard"); // or your preferred dashboard route
+      // Go directly to analytics view to show charts/graphs
+      navigate("/dashboard?view=analytics");
     }
   };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t shadow-elegant z-50">
       <div className="container mx-auto px-4 py-3">
-        <div className="grid grid-cols-3 gap-2 max-w-md mx-auto">
+        <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto justify-items-center">
           <Button
             variant="outline"
+            size="icon"
+            aria-label="Back"
             onClick={handleBack}
-            className="gap-2 transition-all hover:scale-105"
+            className="h-12 w-12 transition-transform hover:scale-105"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           <Button
             variant={location.pathname === "/" ? "default" : "outline"}
+            size="icon"
+            aria-label="Home"
             onClick={handleHome}
-            className="gap-2 transition-all hover:scale-105"
+            className="h-12 w-12 transition-transform hover:scale-105"
           >
-            <Home className="h-4 w-4" />
-            Home
+            <Home className="h-5 w-5" />
           </Button>
           <Button
             variant={location.pathname.startsWith("/dashboard") ? "default" : "outline"}
+            size="icon"
+            aria-label="Dashboard"
             onClick={handleDashboard}
-            className="gap-2 transition-all hover:scale-105"
+            className="h-12 w-12 transition-transform hover:scale-105"
           >
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
+            <LayoutDashboard className="h-5 w-5" />
           </Button>
         </div>
       </div>

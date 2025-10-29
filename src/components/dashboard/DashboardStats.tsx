@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
 import { Users, TrendingUp, CheckCircle, Flame, Target } from "lucide-react";
+import { isWorkingCategoryStatus, isBookedStatus } from "@/lib/leadStatus";
 import { useMemo, useState } from "react";
 import LeadDetailDialog from "./LeadDetailDialog"; // ✅ Changed import name
 import HotLeadsDialog from "./HotLeadsDialog";
@@ -16,24 +17,13 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
 
   // ⚙️ WORKING LEADS
   const workingLeads = useMemo(() =>
-    leads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      return (
-        status.includes("follow-up") ||
-        status.includes("working") ||
-        status.includes("whatsapp") ||
-        status.includes("proposal") ||
-        status.includes("negotiations")
-      );
-    }),
+    leads.filter(lead => isWorkingCategoryStatus(lead.status)),
     [leads]
   );
 
   // ✅ BOOKED LEADS
   const bookedLeads = useMemo(() =>
-    leads.filter(lead =>
-      (lead.status || "").toLowerCase().includes("booked with us")
-    ),
+    leads.filter(lead => isBookedStatus(lead.status)),
     [leads]
   );
 

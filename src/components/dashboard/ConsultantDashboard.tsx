@@ -4,16 +4,20 @@ import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { secureStorage } from "@/lib/secureStorage";
 import { LeadCard } from "./LeadCard";
+import ProgressiveList from "@/components/ProgressiveList";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, FileText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LeadDetailsDialog from "./LeadDetailsDialog";
+import ReminderDialog from "./ReminderDialog";
 import AddLeadDialog from "./AddLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
+import DailyReportDialog from "./DailyReportDialog";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
+import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isNewCategoryStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
 
 const ConsultantDashboard = () => {
   const location = useLocation();
@@ -21,8 +25,11 @@ const ConsultantDashboard = () => {
   const isAnalyticsOnly = viewParam === 'analytics';
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [reminderLead, setReminderLead] = useState<{ id: string; name: string } | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showDailyReport, setShowDailyReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
   const savedFilters = stateManager.getFilters();
   const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
@@ -100,54 +107,106 @@ const ConsultantDashboard = () => {
     fetchLeads();
   }, []);
 
-  // Silent background sync every 30 seconds without navigation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLeads(true); // Silent sync
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Silent background sync honoring cache TTL to avoid extra fetches
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cached = stateManager.getCachedLeads();
+      if (!cached.isValid) {
+        fetchLeads(true); // Silent sync only when cache is stale
+      }
+    }, 15000); // check more frequently but fetch only if stale
+    return () => clearInterval(interval);
+  }, []);
 
-  // Filter and search logic
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const matchesSearch = !searchQuery || 
-        lead.tripId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.travellerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery);
-      
-      const matchesStatus = statusFilter === "All Statuses" || lead.status === statusFilter;
-      const matchesPriority = priorityFilter === "All Priorities" || lead.priority?.toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
-      
-      return matchesSearch && matchesStatus && matchesPriority && matchesDate;
-    });
-  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
+  // Filter and search logic
+  const filteredLeads = useMemo(() => {
+    const queryLower = (searchQuery || '').toLowerCase();
+    const queryDigits = (searchQuery || '').replace(/\D+/g, '');
+
+    const matchesQuery = (lead: SheetLead): boolean => {
+      if (!searchQuery) return true;
+
+      const textFields = [
+        lead.tripId,
+        lead.travellerName,
+        lead.phone,
+        lead.email,
+        lead.consultant,
+        lead.status,
+        lead.priority || '',
+        lead.travelDate,
+        lead.travelState,
+        lead.remarks,
+        lead.nights,
+        lead.pax,
+        lead.hotelCategory,
+        lead.mealPlan,
+        lead.dateAndTime,
+        lead.notes || ''
+      ];
+
+      if (textFields.some(v => String(v || '').toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      if (queryDigits) {
+        const anyDigitsHit = textFields.some(v => String(v || '').replace(/\D+/g, '').includes(queryDigits));
+        if (anyDigitsHit) return true;
+      }
+
+      if ((lead.remarkHistory || []).some(r => String(r).toLowerCase().includes(queryLower))) {
+        return true;
+      }
+
+      return false;
+    };
+
+    return leads.filter(lead => {
+      const matchesSearch = matchesQuery(lead);
+
+      const matchesStatus =
+        statusFilter === "All Statuses" ||
+        normalizeStatus(lead.status) === normalizeStatus(statusFilter);
+      const matchesPriority =
+        priorityFilter === "All Priorities" ||
+        (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
+      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+
+      // EXTRA SCOPE ENFORCEMENT: If consultant tries to search another
+      // consultant's trip id or phone, do not reveal that record.
+      // We already pre-filter `leads` to only include the current consultant,
+      // but this explicitly guards any accidental leakage via search.
+      const assignedToSelf = !!(lead.consultant && session?.user?.name &&
+        lead.consultant.toLowerCase().includes(session.user.name.toLowerCase()));
+      
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesDate &&
+        assignedToSelf
+      );
+    });
+  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
 
   // Categorize leads by status
-  const newLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('unfollowed') || 
-      lead.status.toLowerCase().includes('follow-up')
-    ), [filteredLeads]
-  );
+  const newLeads = useMemo(() => 
+    filteredLeads.filter(lead => isNewCategoryStatus(lead.status) || normalizeStatus(lead.status).includes('follow-up')), [filteredLeads]
+  );
 
-  const workingLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('working') || 
-      lead.status.toLowerCase().includes('whatsapp') ||
-      lead.status.toLowerCase().includes('proposal') ||
-      lead.status.toLowerCase().includes('negotiations') ||
-      lead.status.toLowerCase().includes('hot')
-    ), [filteredLeads]
-  );
+  const workingLeads = useMemo(() => 
+    filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)), [filteredLeads]
+  );
 
-  const bookedLeads = useMemo(() => 
-    filteredLeads.filter(lead => 
-      lead.status.toLowerCase().includes('booked with us')
-    ), [filteredLeads]
-  );
+  const bookedLeads = useMemo(() => 
+    filteredLeads.filter(lead => isBookedStatus(lead.status)), [filteredLeads]
+  );
 
+  const cancelLeads = useMemo(() =>
+    filteredLeads.filter(lead => isCancelCategoryStatus(lead.status)), [filteredLeads]
+  );
+
+  // Left swipe = mark cancellation
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
       const credentials = await secureStorage.getCredentials();
@@ -164,32 +223,32 @@ const ConsultantDashboard = () => {
       // Optimistic UI update
       setLeads((prev) => prev.map((l) =>
         l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
-          ? { ...l, status: 'Converted' }
+          ? { ...l, status: 'Cancelled' }
           : l
       ));
 
-      await sheetsService.updateLead(lead, { status: 'Converted' });
-      toast({
-        title: "Lead Converted!",
-        description: `${lead.travellerName} marked as booked.`,
-      });
+      await sheetsService.updateLead(lead, { status: 'Cancelled' });
+      toast({
+        title: "Lead Cancelled",
+        description: `${lead.travellerName} moved to cancellations.`,
+      });
       // Force refresh to bypass cached leads so UI stays consistent
       fetchLeads(false, true);
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Failed to convert lead",
+        title: "Failed to cancel lead",
         description: error.message,
       });
     }
   };
 
-  const handleSwipeRight = (lead: SheetLead) => {
-    toast({
-      title: "Reminder Set!",
-      description: `Reminder created for ${lead.travellerName}`,
-    });
-  };
+  // Right swipe = open reminder dialog via selection
+  const handleSwipeRight = (lead: SheetLead) => {
+    setReminderLead({ id: lead.tripId, name: lead.travellerName });
+    setShowReminderDialog(true);
+    toast({ title: "Reminder", description: `Add reminder for ${lead.travellerName}` });
+  };
 
   const renderLeadGrid = (leadsToRender: SheetLead[]) => {
     if (loading) {
@@ -209,19 +268,24 @@ const ConsultantDashboard = () => {
       );
     }
 
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {leadsToRender.map((lead, index) => (
-          <LeadCard
-            key={`${lead.tripId}-${index}`} 
-            lead={lead} 
-            onClick={() => setSelectedLead(lead)}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-          />
-        ))}
-      </div>
-    );
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <ProgressiveList
+          items={leadsToRender}
+          batchSize={24}
+          initialBatches={2}
+          renderItem={(lead, index) => (
+            <LeadCard
+              key={`${lead.tripId}-${index}`}
+              lead={lead}
+              onClick={() => setSelectedLead(lead)}
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
+            />
+          )}
+        />
+      </div>
+    );
   };
 
   return (
@@ -231,11 +295,15 @@ const ConsultantDashboard = () => {
           <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">My Leads</h2>
           <p className="text-xs sm:text-sm text-muted-foreground">Manage your assigned leads</p>
         </div>
-        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
           <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
             <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
             <span>Add Lead</span>
           </Button>
+          <Button onClick={() => setShowDailyReport(true)} variant="secondary" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Daily Report</span>
+          </Button>
           <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
             <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -266,16 +334,16 @@ const ConsultantDashboard = () => {
         }}
       />
 
-      {isAnalyticsOnly ? (
+      {isAnalyticsOnly ? (
         <div className="space-y-6">
-          <DashboardStats leads={leads} />
+          <DashboardStats leads={filteredLeads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {
           setActiveTab(tab);
           stateManager.setActiveTab(tab);
-        }} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+        }} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="new">
               New Leads ({newLeads.length})
             </TabsTrigger>
@@ -285,6 +353,9 @@ const ConsultantDashboard = () => {
             <TabsTrigger value="booked">
               Booked ({bookedLeads.length})
             </TabsTrigger>
+            <TabsTrigger value="cancel">
+              Cancel ({cancelLeads.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="new">
@@ -298,6 +369,10 @@ const ConsultantDashboard = () => {
           <TabsContent value="booked">
             {renderLeadGrid(bookedLeads)}
           </TabsContent>
+
+          <TabsContent value="cancel">
+            {renderLeadGrid(cancelLeads)}
+          </TabsContent>
         </Tabs>
       )}
 
@@ -314,6 +389,19 @@ const ConsultantDashboard = () => {
                 ? { ...l, ...updated }
                 : l
             ));
+          }}
+        />
+      )}
+
+      {showReminderDialog && reminderLead && (
+        <ReminderDialog
+          open={showReminderDialog}
+          onClose={() => setShowReminderDialog(false)}
+          leadTripId={reminderLead.id}
+          leadName={reminderLead.name}
+          onReminderSet={() => {
+            setShowReminderDialog(false);
+            toast({ title: 'Reminder Set', description: `Reminder created for ${reminderLead.name}` });
           }}
         />
       )}
@@ -349,6 +437,15 @@ const ConsultantDashboard = () => {
               ...prev,
             ]);
           }}
+        />
+      )}
+
+      {showDailyReport && (
+        <DailyReportDialog
+          open={showDailyReport}
+          onClose={() => setShowDailyReport(false)}
+          mode="consultant"
+          leads={leads}
         />
       )}
     </div>
