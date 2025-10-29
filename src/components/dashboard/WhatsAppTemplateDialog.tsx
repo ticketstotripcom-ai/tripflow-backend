@@ -7,6 +7,7 @@ import { MessageCircle, Send } from "lucide-react";
 import { whatsappTemplates, formatTemplate, type WhatsAppTemplate } from "@/lib/whatsappTemplates";
 import { SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
+import { formatDisplayDate } from "@/lib/dateUtils";
 
 interface WhatsAppTemplateDialogProps {
   open: boolean;
@@ -28,7 +29,7 @@ const WhatsAppTemplateDialog = ({ open, onClose, lead }: WhatsAppTemplateDialogP
     hotelCategory: lead.hotelCategory,
     mealPlan: lead.mealPlan,
     tripId: lead.tripId,
-    travelDate: lead.travelDate ? new Date(lead.travelDate).toLocaleDateString() : '',
+    travelDate: lead.travelDate ? formatDisplayDate(lead.travelDate) : '',
   });
 
   const handleTemplateSelect = (template: WhatsAppTemplate) => {

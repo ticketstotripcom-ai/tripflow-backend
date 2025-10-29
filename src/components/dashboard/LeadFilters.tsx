@@ -14,6 +14,10 @@ interface LeadFiltersProps {
   onConsultantChange?: (value: string) => void;
   consultants?: string[];
   showConsultantFilter?: boolean;
+  // New optional date range
+  dateFromFilter?: string;
+  dateToFilter?: string;
+  onDateRangeChange?: (from: string, to: string) => void;
 }
 
 const LEAD_STATUSES = [
@@ -46,11 +50,15 @@ const LeadFilters = ({
   onConsultantChange,
   consultants = [],
   showConsultantFilter = false,
+  dateFromFilter = '',
+  dateToFilter = '',
+  onDateRangeChange,
 }: LeadFiltersProps) => {
   const handleClearAll = () => {
     onStatusChange("All Statuses");
     onPriorityChange("All Priorities");
     onDateFilterChange("");
+    onDateRangeChange?.('', '');
     if (onConsultantChange) {
       onConsultantChange("All Consultants");
     }
@@ -60,11 +68,12 @@ const LeadFilters = ({
     statusFilter !== "All Statuses" || 
     priorityFilter !== "All Priorities" || 
     dateFilter !== "" ||
+    (dateFromFilter !== '' || dateToFilter !== '') ||
     (consultantFilter && consultantFilter !== "All Consultants");
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-card rounded-lg border shadow-sm">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-card rounded-lg border shadow-sm">
       <div className="space-y-2">
         <Label className="text-xs font-medium">Status</Label>
         <Select value={statusFilter} onValueChange={onStatusChange}>
@@ -98,11 +107,30 @@ const LeadFilters = ({
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs font-medium">Date Filter</Label>
+        <Label className="text-xs font-medium">Exact Date</Label>
         <Input
           type="date"
           value={dateFilter}
           onChange={(e) => onDateFilterChange(e.target.value)}
+          className="h-9"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">From</Label>
+        <Input
+          type="date"
+          value={dateFromFilter}
+          onChange={(e) => onDateRangeChange?.(e.target.value, dateToFilter)}
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">To</Label>
+        <Input
+          type="date"
+          value={dateToFilter}
+          onChange={(e) => onDateRangeChange?.(dateFromFilter, e.target.value)}
           className="h-9"
         />
       </div>

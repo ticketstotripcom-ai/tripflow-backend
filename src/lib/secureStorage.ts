@@ -36,6 +36,13 @@ export interface SecureCredentials {
   worksheetNames: string[];
   columnMappings: Record<string, string>;
   paymentLinks?: { name: string; url: string; qrImage?: string }[];
+  // Multi-sheet support (optional; preserves backward compatibility)
+  sheets?: Array<{
+    name: string;
+    sheetId: string;
+    worksheetNames?: string[];
+    columnMappings?: Record<string, string>;
+  }>;
 }
 
 export const secureStorage = {

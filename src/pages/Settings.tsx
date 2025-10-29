@@ -39,6 +39,14 @@ const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([]);
+  const [sheets, setSheets] = useState<Array<{
+    name: string;
+    sheetId: string;
+    worksheetNames: string[];
+    columnMappings: Record<string, string>;
+  }>>([
+    { name: "Primary", sheetId: "", worksheetNames: ["MASTER DATA", "BACKEND SHEET"], columnMappings }
+  ]);
   const [newUser, setNewUser] = useState<{ name: string; email: string; phone: string; role: 'admin' | 'consultant'; password: string }>({
     name: '', email: '', phone: '', role: 'consultant', password: '123456'
   });
@@ -63,6 +71,14 @@ const Settings = () => {
       setWorksheetNames(credentials.worksheetNames || ["MASTER DATA", "BACKEND SHEET"]);
       setColumnMappings(credentials.columnMappings || columnMappings);
       setPaymentLinks(credentials.paymentLinks || paymentLinks);
+      if (credentials.sheets && credentials.sheets.length > 0) {
+        setSheets(credentials.sheets.map(s => ({
+          name: s.name,
+          sheetId: s.sheetId,
+          worksheetNames: s.worksheetNames || ["MASTER DATA", "BACKEND SHEET"],
+          columnMappings: s.columnMappings || (credentials.columnMappings || columnMappings)
+        })));
+      }
     }
   };
 
@@ -106,7 +122,13 @@ const Settings = () => {
       googleSheetUrl: sheetUrl,
       worksheetNames,
       columnMappings,
-      paymentLinks: paymentLinks.filter(p => p.url)
+      paymentLinks: paymentLinks.filter(p => p.url),
+      sheets: sheets.filter(s => s.sheetId).map(s => ({
+        name: s.name,
+        sheetId: s.sheetId,
+        worksheetNames: s.worksheetNames,
+        columnMappings: s.columnMappings
+      }))
     };
 
     await secureStorage.saveCredentials(credentials);
@@ -224,6 +246,113 @@ const Settings = () => {
             </div>
           </CardContent>
         </Card>
+
+      {/* Manage Google Sheets - Multiple */}
+      <Card className="shadow-soft">
+        <CardHeader>
+          <CardTitle>Manage Google Sheets</CardTitle>
+          <CardDescription>
+            Configure multiple spreadsheets (leads can be merged across all)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {sheets.map((s, index) => (
+            <div key={index} className="border rounded-lg p-3 sm:p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>Sheet Name</Label>
+                  <Input
+                    value={s.name}
+                    onChange={(e) => {
+                      const arr = [...sheets];
+                      arr[index].name = e.target.value;
+                      setSheets(arr);
+                    }}
+                    placeholder="Primary"
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Sheet ID</Label>
+                  <Input
+                    value={s.sheetId}
+                    onChange={(e) => {
+                      const arr = [...sheets];
+                      arr[index].sheetId = e.target.value;
+                      setSheets(arr);
+                    }}
+                    placeholder="1AbCDefGhIj..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Leads Worksheet</Label>
+                  <Input
+                    value={s.worksheetNames[0]}
+                    onChange={(e) => {
+                      const arr = [...sheets];
+                      arr[index].worksheetNames = [e.target.value, arr[index].worksheetNames[1]];
+                      setSheets(arr);
+                    }}
+                    placeholder="MASTER DATA"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Users Worksheet</Label>
+                  <Input
+                    value={s.worksheetNames[1]}
+                    onChange={(e) => {
+                      const arr = [...sheets];
+                      arr[index].worksheetNames = [arr[index].worksheetNames[0], e.target.value];
+                      setSheets(arr);
+                    }}
+                    placeholder="BACKEND SHEET"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-3">
+                <h4 className="text-xs font-semibold mb-3">Column Mappings</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {Object.entries(s.columnMappings).map(([key, value]) => (
+                    <div key={key} className="space-y-1">
+                      <Label className="text-[10px]">{key.replace(/_/g, ' ').toUpperCase()}</Label>
+                      <Input
+                        value={value}
+                        onChange={(e) => {
+                          const arr = [...sheets];
+                          arr[index].columnMappings = { ...arr[index].columnMappings, [key]: e.target.value.toUpperCase() };
+                          setSheets(arr);
+                        }}
+                        className="text-center"
+                        maxLength={2}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setSheets(prev => prev.filter((_, i) => i !== index))}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            onClick={() => setSheets(prev => ([...prev, { name: `Sheet ${prev.length + 1}`, sheetId: "", worksheetNames: ["MASTER DATA", "BACKEND SHEET"], columnMappings }]))}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" /> Add Another Sheet
+          </Button>
+        </CardContent>
+      </Card>
 
         <Card className="shadow-soft">
           <CardHeader>

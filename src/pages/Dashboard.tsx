@@ -40,7 +40,7 @@ const Dashboard = () => {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="w-full sm:w-auto">
               <h1 className="text-lg sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent truncate">
-                Tickets To Trip CRM
+                TTT CRM
               </h1>
               <p className="text-xs sm:text-sm text-muted-foreground truncate">
                 Welcome back, {session.user.name} ({session.user.role})

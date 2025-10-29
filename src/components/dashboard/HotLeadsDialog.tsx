@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, Flame } from "lucide-react";
 import LeadDetailsDialog from "./LeadDetailsDialog";
+import { formatDisplayDate } from "@/lib/dateUtils";
 
 interface HotLeadsDialogProps {
   open: boolean;
@@ -14,51 +15,7 @@ interface HotLeadsDialogProps {
   leads: SheetLead[];
 }
 
-/**
- * Format date as "6 November 2025"
- */
-const formatTravelDate = (dateStr: string): string => {
-  if (!dateStr) return '';
-  
-  try {
-    const s = String(dateStr).trim();
-    const match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (match) {
-      const mm = Number(match[1]);
-      const dd = Number(match[2]);
-      let yyyy = Number(match[3]);
-      
-      if (yyyy < 100) {
-        yyyy = yyyy < 50 ? 2000 + yyyy : 1900 + yyyy;
-      }
-      
-      const date = new Date(yyyy, mm - 1, dd);
-      
-      if (isNaN(date.getTime())) {
-        return dateStr;
-      }
-      
-      return date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-    }
-    
-    const date = new Date(s);
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-    }
-    
-    return dateStr;
-  } catch (e) {
-    return dateStr;
-  }
-};
+// Use global date util for consistent display
 
 const HotLeadsDialog = ({ open, onClose, leads }: HotLeadsDialogProps) => {
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
@@ -136,7 +93,7 @@ const HotLeadsDialog = ({ open, onClose, leads }: HotLeadsDialogProps) => {
                         {lead.travelDate && (
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span className="truncate text-xs">{formatTravelDate(lead.travelDate)}</span>
+                            <span className="truncate text-xs">{formatDisplayDate(lead.travelDate)}</span>
                           </div>
                         )}
                         

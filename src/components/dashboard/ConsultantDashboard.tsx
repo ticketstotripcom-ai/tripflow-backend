@@ -14,10 +14,14 @@ import AddLeadDialog from "./AddLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
+import MonthlyBookedReport from "./MonthlyBookedReport";
+import CustomerJourney from "./CustomerJourney";
+import PullToRefresh from "@/components/PullToRefresh";
 import DailyReportDialog from "./DailyReportDialog";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
 import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isNewCategoryStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
+import { compareDescByDate } from "@/lib/dateUtils";
 
 const ConsultantDashboard = () => {
   const location = useLocation();
@@ -31,10 +35,12 @@ const ConsultantDashboard = () => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
-  const savedFilters = stateManager.getFilters();
-  const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
-  const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
-  const [dateFilter, setDateFilter] = useState(savedFilters.dateFilter);
+  const savedFilters = stateManager.getFilters();
+  const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
+  const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
+  const [dateFilter, setDateFilter] = useState(savedFilters.dateFilter);
+  const [dateFromFilter, setDateFromFilter] = useState(savedFilters.dateFromFilter || '');
+  const [dateToFilter, setDateToFilter] = useState(savedFilters.dateToFilter || '');
   const [activeTab, setActiveTab] = useState(() => {
     if (isAnalyticsOnly) return "dashboard";
     const saved = stateManager.getActiveTab();
@@ -66,19 +72,31 @@ const ConsultantDashboard = () => {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Google Sheets not configured');
 
-      const sheetsService = new GoogleSheetsService({
-        apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
-        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
-        worksheetNames: credentials.worksheetNames,
-        columnMappings: credentials.columnMappings
-      });
-
-      const data = await sheetsService.fetchLeads();
+      let data: SheetLead[] = [];
+      if (credentials.sheets && credentials.sheets.length > 0) {
+        const services = credentials.sheets.map((s) => new GoogleSheetsService({
+          apiKey: credentials.googleApiKey,
+          serviceAccountJson: credentials.googleServiceAccountJson,
+          sheetId: s.sheetId,
+          worksheetNames: s.worksheetNames || credentials.worksheetNames,
+          columnMappings: s.columnMappings || credentials.columnMappings,
+        }));
+        const results = await Promise.all(services.map(svc => svc.fetchLeads(forceRefresh)));
+        data = results.flat();
+      } else {
+        const sheetsService = new GoogleSheetsService({
+          apiKey: credentials.googleApiKey,
+          serviceAccountJson: credentials.googleServiceAccountJson,
+          sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+          worksheetNames: credentials.worksheetNames,
+          columnMappings: credentials.columnMappings
+        });
+        data = await sheetsService.fetchLeads(forceRefresh);
+      }
       stateManager.setCachedLeads(data);
       
       // Filter leads assigned to this consultant
-      const myLeads = data.filter(lead => 
+      const myLeads = data.filter(lead => 
         lead.consultant && 
         lead.consultant.toLowerCase().includes(session?.user.name.toLowerCase() || '')
       );
@@ -170,7 +188,23 @@ const ConsultantDashboard = () => {
       const matchesPriority =
         priorityFilter === "All Priorities" ||
         (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
-      const matchesDate = !dateFilter || lead.dateAndTime === dateFilter;
+      // Date filters: exact date or range
+      const leadDate = lead.dateAndTime;
+      let matchesDate = true;
+      if (dateFilter) {
+        matchesDate = leadDate === dateFilter;
+      }
+      if ((dateFromFilter || dateToFilter) && leadDate) {
+        const ld = new Date(leadDate + 'T00:00:00');
+        if (dateFromFilter) {
+          const from = new Date(dateFromFilter + 'T00:00:00');
+          if (ld < from) matchesDate = false;
+        }
+        if (dateToFilter) {
+          const to = new Date(dateToFilter + 'T23:59:59');
+          if (ld > to) matchesDate = false;
+        }
+      }
 
       // EXTRA SCOPE ENFORCEMENT: If consultant tries to search another
       // consultant's trip id or phone, do not reveal that record.
@@ -187,23 +221,26 @@ const ConsultantDashboard = () => {
         assignedToSelf
       );
     });
-  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter]);
+  }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, dateFromFilter, dateToFilter]);
 
   // Categorize leads by status
   const newLeads = useMemo(() => 
-    filteredLeads.filter(lead => isNewCategoryStatus(lead.status) || normalizeStatus(lead.status).includes('follow-up')), [filteredLeads]
+    filteredLeads
+      .filter(lead => isNewCategoryStatus(lead.status) || normalizeStatus(lead.status).includes('follow-up'))
+      .slice()
+      .sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)), [filteredLeads]
   );
 
   const workingLeads = useMemo(() => 
-    filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)), [filteredLeads]
+    filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)).slice().sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)), [filteredLeads]
   );
 
   const bookedLeads = useMemo(() => 
-    filteredLeads.filter(lead => isBookedStatus(lead.status)), [filteredLeads]
+    filteredLeads.filter(lead => isBookedStatus(lead.status)).slice().sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)), [filteredLeads]
   );
 
   const cancelLeads = useMemo(() =>
-    filteredLeads.filter(lead => isCancelCategoryStatus(lead.status)), [filteredLeads]
+    filteredLeads.filter(lead => isCancelCategoryStatus(lead.status)).slice().sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)), [filteredLeads]
   );
 
   // Left swipe = mark cancellation
@@ -288,8 +325,9 @@ const ConsultantDashboard = () => {
     );
   };
 
-  return (
-    <div className="space-y-3 sm:space-y-6">
+  return (
+    <PullToRefresh onRefresh={() => fetchLeads(false, true)}>
+    <div className="space-y-3 sm:space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">My Leads</h2>
@@ -316,10 +354,12 @@ const ConsultantDashboard = () => {
         stateManager.setSearchQuery(query);
       }} />
 
-      <LeadFilters
+      <LeadFilters
         statusFilter={statusFilter}
         priorityFilter={priorityFilter}
         dateFilter={dateFilter}
+        dateFromFilter={dateFromFilter}
+        dateToFilter={dateToFilter}
         onStatusChange={(val) => {
           setStatusFilter(val);
           stateManager.setFilters({ statusFilter: val });
@@ -332,13 +372,20 @@ const ConsultantDashboard = () => {
           setDateFilter(val);
           stateManager.setFilters({ dateFilter: val });
         }}
+        onDateRangeChange={(from, to) => {
+          setDateFromFilter(from);
+          setDateToFilter(to);
+          stateManager.setFilters({ dateFromFilter: from, dateToFilter: to });
+        }}
       />
 
       {isAnalyticsOnly ? (
-        <div className="space-y-6">
+        <div className="space-y-6">
           <DashboardStats leads={filteredLeads} />
-        </div>
-      ) : (
+          <CustomerJourney leads={filteredLeads} />
+          <MonthlyBookedReport leads={filteredLeads} />
+        </div>
+      ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {
           setActiveTab(tab);
           stateManager.setActiveTab(tab);
@@ -448,7 +495,8 @@ const ConsultantDashboard = () => {
           leads={leads}
         />
       )}
-    </div>
+    </div>
+    </PullToRefresh>
   );
 };
 

@@ -1,5 +1,7 @@
 // googleSheets.ts
 // Google Sheets API integration
+import { parseFlexibleDate as parseFlexibleDateUtil, formatSheetDate } from './dateUtils';
+import { enqueue } from './offlineQueue';
 
 export interface GoogleSheetsConfig {
   apiKey?: string;
@@ -236,13 +238,10 @@ export class GoogleSheetsService {
     // Optional notes
     let notesMap: Record<number, string> = {};
     try {
+      const notesRange = `${worksheetName}!C2:K10000`;
       const notesUrl = this.config.serviceAccountJson
-        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
-            worksheetName
-          )}!K2:K10000&fields=sheets.data.rowData.values.note`
-        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(
-            worksheetName
-          )}!K2:K10000&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`;
+        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(notesRange)}&fields=sheets.data.rowData.values.note`
+        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(notesRange)}&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`;
 
       const notesHeaders = this.config.serviceAccountJson
         ? { Authorization: `Bearer ${await this.getAccessToken()}` }
@@ -252,7 +251,10 @@ export class GoogleSheetsService {
         const notesData = await notesResponse.json();
         const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
         rowData.forEach((row: any, index: number) => {
-          if (row.values?.[0]?.note) notesMap[index] = row.values[0].note;
+          const cellNotes: string[] = (row.values || [])
+            .map((v: any) => (v && v.note ? String(v.note) : ''))
+            .filter((s: string) => !!s);
+          if (cellNotes.length) notesMap[index] = cellNotes.join(' | ');
         });
       }
     } catch (err) {
@@ -313,6 +315,11 @@ export class GoogleSheetsService {
 
   /** Append new lead */
   async appendLead(lead: Partial<SheetLead>): Promise<void> {
+    if (!navigator.onLine) {
+      await enqueue({ type: 'appendLead', config: this.config, lead });
+      console.log('📥 Offline: queued appendLead for later sync');
+      return;
+    }
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
     const range = `${worksheetName}!A:Z`;
     const token = await this.getAccessToken();
@@ -327,7 +334,10 @@ export class GoogleSheetsService {
       if (!col) continue;
       const idx = this.columnToIndex(col);
       if (key in lead && lead[key as keyof SheetLead] !== undefined) {
-        const value = lead[key as keyof SheetLead];
+        let value = lead[key as keyof SheetLead] as any;
+        if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
+          value = formatSheetDate(value);
+        }
         row[idx] = Array.isArray(value) ? value.join('; ') : value;
       }
     }
@@ -345,45 +355,7 @@ export class GoogleSheetsService {
     this.clearLeadsCache();
   }
 
-  /** Parse a date from common formats into a Date object */
-  private parseFlexibleDate(input: string): Date | null {
-    if (!input) return null;
-    const s = String(input).trim();
-
-    // mm/dd/yyyy
-    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (m1) {
-      const mm = Number(m1[1]);
-      const dd = Number(m1[2]);
-      let yy = Number(m1[3]);
-      if (yy < 100) yy = 2000 + yy;
-      const d = new Date(yy, mm - 1, dd);
-      return isNaN(d.getTime()) ? null : d;
-    }
-
-    // dd-Month-yy or dd-Month-yyyy (e.g., 03-April-25)
-    const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
-    if (m2) {
-      const dd = Number(m2[1]);
-      const monthName = m2[2];
-      let yy = Number(m2[3]);
-      if (yy < 100) yy = 2000 + yy;
-      const monthIndex = new Date(`${monthName} 1, 2000`).getMonth();
-      if (isNaN(monthIndex)) return null;
-      const d = new Date(yy, monthIndex, dd);
-      return isNaN(d.getTime()) ? null : d;
-    }
-
-    return null;
-  }
-
-  /** Format Date to mm/dd/yyyy */
-  private toMMDDYYYY(date: Date): string {
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const yyyy = String(date.getFullYear());
-    return `${mm}/${dd}/${yyyy}`;
-  }
+  // Date parsing/formatting is provided by dateUtils
 
   /** Update a lead by (date+traveller) using stored row number */
   async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void>;
@@ -407,9 +379,15 @@ export class GoogleSheetsService {
       throw new Error('Date + Traveller Name required to update lead');
     }
 
+    if (!navigator.onLine) {
+      await enqueue({ type: 'updateLead', config: this.config, identity: { dateAndTime, travellerName }, updates: updates || {} });
+      console.log('📥 Offline: queued updateLead for later sync');
+      return;
+    }
+
     const leads = await this.fetchLeads();
 
-    const targetDate = this.parseFlexibleDate(dateAndTime);
+    const targetDate = parseFlexibleDateUtil(dateAndTime);
 
     const sameDay = (d1: Date | null, d2: Date | null) =>
       !!d1 && !!d2 && 
@@ -418,7 +396,7 @@ export class GoogleSheetsService {
       d1.getDate() === d2.getDate();
 
     const matchedLead = leads.find((l) => {
-      const ld = this.parseFlexibleDate(l.dateAndTime);
+      const ld = parseFlexibleDateUtil(l.dateAndTime);
       const dateMatch = sameDay(targetDate, ld) || String(l.dateAndTime).trim() === String(dateAndTime).trim();
       const nameMatch = String(l.travellerName).trim().toLowerCase() === String(travellerName).trim().toLowerCase();
       return dateMatch && nameMatch;
@@ -462,15 +440,8 @@ export class GoogleSheetsService {
 
       let value: any = rawValue;
       
-      if (key === 'travelDate' && typeof value === 'string') {
-        const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (iso) {
-          const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-          value = this.toMMDDYYYY(d);
-        } else {
-          const d = this.parseFlexibleDate(value);
-          if (d) value = this.toMMDDYYYY(d);
-        }
+      if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
+        value = formatSheetDate(value);
       }
 
       const cellRange = `${this.config.worksheetNames[0]}!${col}${rowNumber}`;
