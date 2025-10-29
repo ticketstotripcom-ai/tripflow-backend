@@ -37,6 +37,7 @@ export interface SheetLead {
   priority?: string;
   remarkHistory?: string[];
   notes?: string;
+  timeStamp?: string;
   _rowNumber?: number; // Actual Google Sheet row number
 }
 
@@ -290,6 +291,7 @@ export class GoogleSheetsService {
               ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';')
               : []) || [],
           notes: notesMap[i] || '',
+          timeStamp: cm.timeStamp ? (row[this.columnToIndex(cm.timeStamp || '')] || '') : undefined,
           // ✅ CRITICAL: Store the ACTUAL row number from Google Sheets
           _rowNumber: actualRow,
         };
@@ -341,6 +343,13 @@ export class GoogleSheetsService {
         row[idx] = Array.isArray(value) ? value.join('; ') : value;
       }
     }
+
+    // Explicit logging for critical fields
+    console.log('🆕 Appending lead with fields:', {
+      travellerName: lead.travellerName,
+      travelDate: lead.travelDate,
+      travelState: lead.travelState,
+    });
 
     const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
     const res = await fetch(url, {

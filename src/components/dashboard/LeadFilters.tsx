@@ -2,6 +2,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
+import { useMemo } from "react";
 
 interface LeadFiltersProps {
   statusFilter: string;
@@ -71,6 +73,12 @@ const LeadFilters = ({
     (dateFromFilter !== '' || dateToFilter !== '') ||
     (consultantFilter && consultantFilter !== "All Consultants");
 
+  const rangeValue: DateRange = useMemo(() => {
+    const from = dateFromFilter ? new Date(`${dateFromFilter}T00:00:00`) : undefined;
+    const to = dateToFilter ? new Date(`${dateToFilter}T23:59:59`) : undefined;
+    return { from, to };
+  }, [dateFromFilter, dateToFilter]);
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-card rounded-lg border shadow-sm">
@@ -106,32 +114,17 @@ const LeadFilters = ({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">Exact Date</Label>
-        <Input
-          type="date"
-          value={dateFilter}
-          onChange={(e) => onDateFilterChange(e.target.value)}
-          className="h-9"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">From</Label>
-        <Input
-          type="date"
-          value={dateFromFilter}
-          onChange={(e) => onDateRangeChange?.(e.target.value, dateToFilter)}
-          className="h-9"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">To</Label>
-        <Input
-          type="date"
-          value={dateToFilter}
-          onChange={(e) => onDateRangeChange?.(dateFromFilter, e.target.value)}
-          className="h-9"
+      <div className="space-y-2 md:col-span-2">
+        <Label className="text-xs font-medium">Lead Date Range</Label>
+        <DateRangePicker
+          value={rangeValue}
+          onChange={(r) => {
+            const from = r?.from ? r.from.toISOString().slice(0, 10) : '';
+            const to = r?.to ? r.to.toISOString().slice(0, 10) : '';
+            // Clear old exact date when using range
+            onDateFilterChange('');
+            onDateRangeChange?.(from, to);
+          }}
         />
       </div>
 

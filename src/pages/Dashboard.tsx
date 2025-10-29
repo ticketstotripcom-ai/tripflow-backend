@@ -7,6 +7,7 @@ import ConsultantDashboard from "@/components/dashboard/ConsultantDashboard";
 import { authService } from "@/lib/authService";
 import { themeService } from "@/lib/themeService";
 import { Moon, Sun } from "lucide-react";
+import NotificationBell from "@/components/NotificationBell";
 
 const Dashboard = () => {
   const [session, setSession] = useState(authService.getSession());
@@ -46,7 +47,8 @@ const Dashboard = () => {
                 Welcome back, {session.user.name} ({session.user.role})
               </p>
             </div>
-            <div className="flex gap-1 sm:gap-2 w-full sm:w-auto justify-end">
+            <div className="flex gap-1 sm:gap-2 w-full sm:w-auto justify-end items-center">
+              <NotificationBell user={session.user} />
               <Button
                 variant="outline"
                 size="icon"
