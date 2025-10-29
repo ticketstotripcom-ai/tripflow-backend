@@ -8,6 +8,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { authService } from "@/lib/authService";
 import { notificationService } from "@/lib/notificationService";
 import { themeService } from "@/lib/themeService";
+import { setupOfflineSync } from "@/lib/offlineQueue";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -28,6 +29,7 @@ const App = () => {
         notificationService.initialize(),
         themeService.initialize(),
       ]);
+      setupOfflineSync();
       setIsReady(true);
     })();
   }, []);

@@ -1,11 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, CheckCircle, Bell, XCircle } from "lucide-react";
+import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, CheckCircle, Bell, XCircle, Clock } from "lucide-react";
 import { SheetLead } from "@/lib/googleSheets";
 import { useState } from "react";
 import { useSwipeable } from "react-swipeable";
 import WhatsAppTemplateDialog from "./WhatsAppTemplateDialog";
+import { formatDisplayDate, isPast, parseFlexibleDate } from "@/lib/dateUtils";
 
 interface LeadCardProps {
   lead: SheetLead;
@@ -16,51 +17,7 @@ interface LeadCardProps {
   onSwipeRight?: (lead: SheetLead) => void;
 }
 
-/** UNIVERSAL robust date formatter for all plausible formats */
-const formatTravelDate = (dateStr: string): string => {
-  if (!dateStr) return '';
-  try {
-    const s = String(dateStr).trim();
-    // dd-Month-yy (or yyyy) and d-Month-yy, etc.
-    const m1 = s.match(/^(\d{1,2})[\/\-\s]([A-Za-z]+)[\/\-\s](\d{2,4})$/);
-    if (m1) {
-      const months = ["january","february","march","april","may","june","july","august",
-        "september","october","november","december"];
-      let monthIndex = months.indexOf(m1[2].toLowerCase());
-      let yyyy = m1[3].length === 2 ? (Number(m1[3]) < 50 ? 2000 + Number(m1[3]) : 1900 + Number(m1[3])) : Number(m1[3]);
-      if (monthIndex !== -1) {
-        let dateObj = new Date(yyyy, monthIndex, Number(m1[1]));
-        if (!isNaN(dateObj.getTime())) {
-          return dateObj.toLocaleDateString('en-GB', { day: "numeric", month: "long", year: "numeric" });
-        }
-      }
-    }
-    // yyyy-mm-dd (ISO)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const date = new Date(s);
-      if (!isNaN(date.getTime())) return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
-    }
-    // dd/mm/yyyy or mm/dd/yyyy or their hyphen versions
-    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-    if (m2) {
-      let a = Number(m2[1]), b = Number(m2[2]), y = Number(m2[3]);
-      let yyyy = y < 100 ? (y < 50 ? 2000 + y : 1900 + y) : y;
-      let date: Date;
-      if (a > 12) date = new Date(yyyy, b - 1, a);
-      else date = new Date(yyyy, a - 1, b);
-      if (!isNaN(date.getTime())) 
-        return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
-    }
-    // generic fallback
-    const date = new Date(s);
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
-    }
-    return s;
-  } catch {
-    return dateStr;
-  }
-};
+// Date formatting is unified via dateUtils
 
 const getCardBackgroundByStatus = (status: string, priority: string) => {
   const lowerStatus = status.toLowerCase();
@@ -225,7 +182,14 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
           {lead.travelDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
-              <span className="font-medium truncate text-xs sm:text-sm">{formatTravelDate(lead.travelDate)}</span>
+              <span className="font-medium truncate text-xs sm:text-sm">{formatDisplayDate(lead.travelDate)}</span>
+              {lead.status.toLowerCase().includes('booked with us') && (
+                isPast(lead.travelDate) ? (
+                  <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+                ) : (
+                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600" />
+                )
+              )}
             </div>
           )}
           

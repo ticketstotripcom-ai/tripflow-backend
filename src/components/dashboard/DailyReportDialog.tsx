@@ -15,6 +15,7 @@ import { SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { isBookedStatus, isCancelCategoryStatus, isNewCategoryStatus, normalizeStatus } from "@/lib/leadStatus";
 import { Calendar, Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
+import { parseFlexibleDate, formatDisplayDate, extractAnyDateFromText } from "@/lib/dateUtils";
 
 type Mode = "consultant" | "admin";
 
@@ -47,37 +48,6 @@ function toISODate(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function parseFlexibleDate(input: string): Date | null {
-  if (!input) return null;
-  const s = String(input).trim();
-  // mm/dd/yyyy or mm/dd/yy
-  const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (m1) {
-    const mm = Number(m1[1]);
-    const dd = Number(m1[2]);
-    let yy = Number(m1[3]);
-    if (yy < 100) yy = 2000 + yy;
-    const d = new Date(yy, mm - 1, dd);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  // dd-Month-yy or dd-Month-yyyy (e.g., 03-April-25)
-  const m2 = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
-  if (m2) {
-    const dd = Number(m2[1]);
-    const monthName = m2[2];
-    let yy = Number(m2[3]);
-    if (yy < 100) yy = 2000 + yy;
-    const monthIndex = new Date(`${monthName} 1, 2000`).getMonth();
-    if (isNaN(monthIndex)) return null;
-    const d = new Date(yy, monthIndex, dd);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  // ISO yyyy-mm-dd
-  const iso = new Date(s);
-  if (!isNaN(iso.getTime())) return iso;
-  return null;
 }
 
 function sameDay(a: Date | null, b: Date | null): boolean {
@@ -234,7 +204,11 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   const selectedDay = useMemo(() => new Date(`${selectedDate}T00:00:00`), [selectedDate]);
 
   const leadsForDay = useMemo(() => {
-    return leads.filter((l) => sameDay(parseFlexibleDate(l.dateAndTime), selectedDay));
+    return leads.filter((l) => {
+      const noteDate = extractAnyDateFromText(l.notes);
+      if (noteDate) return sameDay(noteDate, selectedDay);
+      return sameDay(parseFlexibleDate(l.dateAndTime), selectedDay);
+    });
   }, [leads, selectedDay]);
 
   const myName = session?.user?.name || "";
@@ -292,10 +266,7 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
     window.open(`https://wa.me/?text=${encoded}`, "_blank");
   };
 
-  const dateDisplay = useMemo(() => {
-    const d = selectedDay;
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-  }, [selectedDay]);
+  const dateDisplay = useMemo(() => formatDisplayDate(selectedDay), [selectedDay]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>

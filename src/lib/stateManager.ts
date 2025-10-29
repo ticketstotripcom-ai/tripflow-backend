@@ -9,6 +9,8 @@ interface AppState {
   statusFilter: string;
   priorityFilter: string;
   dateFilter: string;
+  dateFromFilter?: string;
+  dateToFilter?: string;
   consultantFilter: string;
   
   // Cached data
@@ -30,6 +32,8 @@ class StateManager {
     statusFilter: 'All Statuses',
     priorityFilter: 'All Priorities',
     dateFilter: '',
+    dateFromFilter: '',
+    dateToFilter: '',
     consultantFilter: 'All Consultants',
     cachedLeads: [],
     lastFetchTime: 0,
@@ -106,12 +110,16 @@ class StateManager {
     statusFilter: string;
     priorityFilter: string;
     dateFilter: string;
+    dateFromFilter?: string;
+    dateToFilter?: string;
     consultantFilter: string;
   } {
     return {
       statusFilter: this.state.statusFilter,
       priorityFilter: this.state.priorityFilter,
       dateFilter: this.state.dateFilter,
+      dateFromFilter: this.state.dateFromFilter,
+      dateToFilter: this.state.dateToFilter,
       consultantFilter: this.state.consultantFilter
     };
   }
@@ -120,6 +128,8 @@ class StateManager {
     statusFilter: string;
     priorityFilter: string;
     dateFilter: string;
+    dateFromFilter: string;
+    dateToFilter: string;
     consultantFilter: string;
   }>): void {
     this.state = { ...this.state, ...filters };
@@ -171,6 +181,8 @@ class StateManager {
       statusFilter: 'All Statuses',
       priorityFilter: 'All Priorities',
       dateFilter: '',
+      dateFromFilter: '',
+      dateToFilter: '',
       consultantFilter: 'All Consultants',
       cachedLeads: [],
       lastFetchTime: 0,

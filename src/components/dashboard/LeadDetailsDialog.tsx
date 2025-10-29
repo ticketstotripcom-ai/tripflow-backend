@@ -5,11 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { Bell } from "lucide-react";
+import { formatDisplayDate } from "@/lib/dateUtils";
 import ReminderDialog from "./ReminderDialog";
 
 interface LeadDetailsDialogProps {
@@ -141,19 +143,29 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
         columnMappings: credentials.columnMappings
       });
       const dataToSave = {
-        ...formData,
-        travelDate: `${formData.travelDate.split("/")[1]}/${formData.travelDate.split("/")[0]}/${formData.travelDate.split("/")[2]}`, // mm/dd/yyyy for Sheets
-        remarks: sanitizeText(formData.remarks),
-        notes: sanitizeText(formData.notes)
-      };
+        ...formData,
+        // Date normalization handled inside GoogleSheetsService
+        remarks: sanitizeText(formData.remarks),
+        notes: sanitizeText(formData.notes)
+      };
       // Optimistically update UI immediately
       const optimisticLead: SheetLead = {
         ...lead,
         ...formData,
       };
       onImmediateUpdate?.(optimisticLead);
+      const wasBooked = (lead.status || '').toLowerCase().includes('booked');
+      const nowBooked = (formData.status || '').toLowerCase().includes('booked');
       await sheetsService.updateLead(lead, dataToSave);
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
+      if (!wasBooked && nowBooked) {
+        // Fire confetti celebration
+        try {
+          const mod = await import('canvas-confetti');
+          const confetti = mod.default;
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+        } catch {}
+      }
       // Ask parent to force refresh so the updated lead reflects immediately
       onUpdate();
       onClose();
@@ -230,7 +242,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
                 Travel Date
                 <span className="text-xs text-muted-foreground ml-2">(dd/mm/yyyy)</span>
               </Label>
-              <div className="flex gap-2">
+                <div className="flex gap-2">
                 <Input
                   type="text"
                   placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
@@ -240,28 +252,32 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
                   autoComplete="off"
                   onFocus={() => setCalendarOpen(true)}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setCalendarOpen(v => !v)}
-                >
-                  📅
-                </Button>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCalendarOpen(v => !v)}
+                      >
+                        📅
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="p-0">
+                      <Calendar
+                        mode="single"
+                        selected={parseAnyDate(formData.travelDate) || undefined}
+                        onSelect={handleCalendarChange}
+                        className="rounded-md"
+                      />
+                    </PopoverContent>
+                  </Popover>
               </div>
-              {calendarOpen && (
-                <Calendar
-                  mode="single"
-                  selected={parseAnyDate(formData.travelDate) || undefined}
-                  onSelect={handleCalendarChange}
-                  className="mt-2"
-                  onClickOutside={() => setCalendarOpen(false)}
-                />
-              )}
+                {/* Floating calendar handled by Popover */}
               {dateError && <p className="text-xs text-red-500">{dateError}</p>}
-              {!dateError && formData.travelDate && (
-                <p className="text-xs text-green-600">✓ {prettyDateDisplay(formData.travelDate)}</p>
-              )}
+              {!dateError && formData.travelDate && (
+                <p className="text-xs text-green-600">✓ {formatDisplayDate(parseAnyDate(formData.travelDate) as any)}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Travel State</Label>
