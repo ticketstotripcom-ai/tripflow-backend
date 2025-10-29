@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Settings } from "lucide-react";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import ConsultantDashboard from "@/components/dashboard/ConsultantDashboard";
+import Blackboard from "@/components/Blackboard";
 import { authService } from "@/lib/authService";
 import { themeService } from "@/lib/themeService";
 import { Moon, Sun } from "lucide-react";
@@ -31,7 +32,11 @@ const Dashboard = () => {
   };
 
   if (!session) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20 flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading dashboard…</div>
+      </div>
+    );
   }
 
   return (
@@ -80,8 +85,9 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <main className="w-full px-2 sm:px-4 py-3 sm:py-6">
+      <main className="w-full px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
         {session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />}
+        <Blackboard />
       </main>
 
       {/* BottomNavigation is rendered globally in App.tsx */}

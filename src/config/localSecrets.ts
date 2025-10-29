@@ -4,17 +4,17 @@
 
 export const localSecrets = {
   // Google Sheets API Key (read-only) OR Service Account JSON (for add/update)
-  googleApiKey: "YOUR_GOOGLE_API_KEY_HERE",
+  googleApiKey: "AIzaSyAozO0DUmODQ-tTnXJB-RIPqlIkmmo6SYY",
   
   // Google Sheets URL
-  spreadsheetUrl: "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit",
+  spreadsheetUrl: "https://docs.google.com/spreadsheets/d/1L0wSffEo4CaP0AGikJDpu_bu5KLuJ1SzlFSS01Pqugg",
   
   // Service Account JSON for write operations (paste entire JSON as string)
   serviceAccountJson: `{
     "type": "service_account",
     "project_id": "YOUR_PROJECT",
     "private_key_id": "YOUR_KEY_ID",
-    "private_key": "-----BEGIN PRIVATE KEY-----\\\\nYOUR_PRIVATE_KEY\\\\n-----END PRIVATE KEY-----\\\\n",
+    "private_key": "-----BEGIN PRIVATE KEY-----\\nYOUR_PRIVATE_KEY\\n-----END PRIVATE KEY-----\\n",
     "client_email": "YOUR_SERVICE_ACCOUNT@YOUR_PROJECT.iam.gserviceaccount.com",
     "client_id": "YOUR_CLIENT_ID",
     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
