@@ -167,6 +167,48 @@ export class GoogleSheetsService {
       .filter((u) => u.email && u.password);
   }
 
+  /** Append a user to BACKEND SHEET */
+  async appendUser(user: SheetUser): Promise<void> {
+    if (!this.config.serviceAccountJson) {
+      throw new Error('Service Account JSON required to add users');
+    }
+    const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
+    const range = `${worksheetName}!A:Z`;
+    const token = await this.getAccessToken();
+    const cm = this.config.columnMappings;
+
+    const row: any[] = [];
+    const maxCol = Math.max(
+      ...['name','email','phone','role','password']
+        .map((k) => cm[k as keyof typeof cm] || '')
+        .filter(Boolean)
+        .map((c) => this.columnToIndex(c))
+    );
+    for (let i = 0; i <= maxCol; i++) row[i] = '';
+
+    const mapping: Record<string, string> = {
+      name: cm.name || 'C',
+      email: cm.email || 'D',
+      phone: cm.phone || 'E',
+      role: cm.role || 'M',
+      password: cm.password || 'N',
+    };
+
+    Object.entries(mapping).forEach(([key, col]) => {
+      const idx = this.columnToIndex(col);
+      const value = (user as any)[key];
+      row[idx] = value ?? '';
+    });
+
+    const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: [row] }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
   /** 
    * ✅ FIXED: Fetch leads with ACTUAL row numbers
    * Now fetches ALL rows including empty ones to preserve row numbering

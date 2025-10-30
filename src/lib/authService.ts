@@ -42,10 +42,13 @@ class AuthService {
     }
   }
 
-  async login(email: string, password: string): Promise<{ session: AuthSession | null; error: Error | null }> {
+  async login(rawEmail: string, rawPassword: string): Promise<{ session: AuthSession | null; error: Error | null }> {
     try {
+      const email = String(rawEmail || '').trim().toLowerCase();
+      const password = String(rawPassword || '').trim();
+
       // Check default admin first
-      if (email === DEFAULT_ADMIN.email && password === DEFAULT_ADMIN_PASSWORD) {
+      if (email === DEFAULT_ADMIN.email.toLowerCase() && password === DEFAULT_ADMIN_PASSWORD) {
         const session: AuthSession = {
           user: DEFAULT_ADMIN,
           token: btoa(`${DEFAULT_ADMIN.email}:${Date.now()}`),
@@ -74,16 +77,34 @@ class AuthService {
         columnMappings: credentials.columnMappings
       });
 
-      const users = await sheetsService.fetchUsers();
-      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+      const attemptFetch = async (tries = 2): Promise<SheetUser[]> => {
+        try {
+          const u = await sheetsService.fetchUsers();
+          return u;
+        } catch (e) {
+          if (tries > 0) {
+            await new Promise(r => setTimeout(r, 700));
+            return attemptFetch(tries - 1);
+          }
+          throw e;
+        }
+      };
 
-      if (!user) {
-        return { session: null, error: new Error('Invalid email or password') };
+      const users = await attemptFetch(2);
+      const emailMatch = users.find(u => (u.email || '').trim().toLowerCase() === email);
+      if (!emailMatch) {
+        console.error('Login failed: user not found in backend sheet', { email });
+        return { session: null, error: new Error('user not found in backend sheet') };
       }
+      if ((emailMatch.password || '').trim() !== password) {
+        console.error('Login failed: password mismatch', { email });
+        return { session: null, error: new Error('password mismatch') };
+      }
+      const user = emailMatch;
 
       const authUser: AuthUser = {
         id: btoa(user.email),
-        email: user.email,
+        email: user.email.trim().toLowerCase(),
         name: user.name,
         phone: user.phone,
         role: user.role

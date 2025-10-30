@@ -140,10 +140,10 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
                       <span className="font-medium">{month}</span>
                       <span className="text-muted-foreground">{count} leads</span>
                     </div>
-                    <div className="h-8 bg-muted rounded-lg overflow-hidden">
+                    <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
                       <div
-                        className={`h-full ${color.replace('text-', 'bg-')} transition-all duration-500 flex items-center justify-end pr-2`}
-                        style={{ width: `${(count / maxMonthCount) * 100}%` }}
+                        className="h-full transition-all duration-500 flex items-center justify-end pr-2"
+                        style={{ width: `${(count / maxMonthCount) * 100}%`, background: '#10B981' }}
                       >
                         {count > 0 && (
                           <span className="text-xs font-bold text-white">{count}</span>
@@ -175,10 +175,10 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
                       <span className="font-medium">{state}</span>
                       <span className="text-muted-foreground">{count} leads ({((count / leads.length) * 100).toFixed(1)}%)</span>
                     </div>
-                    <div className="h-8 bg-muted rounded-lg overflow-hidden">
+                    <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
                       <div
-                        className={`h-full ${color.replace('text-', 'bg-')} transition-all duration-500 flex items-center justify-end pr-2`}
-                        style={{ width: `${(count / maxStateCount) * 100}%` }}
+                        className="h-full transition-all duration-500 flex items-center justify-end pr-2"
+                        style={{ width: `${(count / maxStateCount) * 100}%`, background: '#10B981' }}
                       >
                         <span className="text-xs font-bold text-white">{count}</span>
                       </div>
@@ -205,10 +205,10 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
                       <span className="font-medium">{status}</span>
                       <span className="text-muted-foreground">{count} leads ({((count / leads.length) * 100).toFixed(1)}%)</span>
                     </div>
-                    <div className="h-6 bg-muted rounded-lg overflow-hidden">
+                    <div className="h-6 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
                       <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                        style={{ width: `${(count / leads.length) * 100}%` }}
+                        className="h-full transition-all duration-500"
+                        style={{ width: `${(count / leads.length) * 100}%`, background: '#10B981' }}
                       />
                     </div>
                   </div>

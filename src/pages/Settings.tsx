@@ -9,6 +9,7 @@ import { Save, Upload, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "@/lib/authService";
 import { secureStorage, SecureCredentials } from "@/lib/secureStorage";
+import { GoogleSheetsService } from "@/lib/googleSheets";
 import { getLocalUsers, addLocalUser, deleteLocalUser, updateLocalUserRole, updateLocalUser, LocalUser } from "@/config/login";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -161,6 +162,30 @@ const Settings = () => {
     setLocalUsers(prev => [...prev, created]);
     setNewUser({ name: '', email: '', phone: '', role: 'consultant', password: '123456' });
     toast({ title: 'User added', description: created.name });
+
+    // Also sync to BACKEND SHEET so login works across devices
+    try {
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) throw new Error('Sheets not configured');
+      const svc = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: credentials.googleServiceAccountJson,
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings,
+      });
+      await svc.appendUser({
+        name: created.name,
+        email: created.email.trim().toLowerCase(),
+        phone: created.phone,
+        role: created.role,
+        password: created.password,
+      });
+      toast({ title: 'Synced to Google Sheet', description: 'User can now log in', duration: 2500 });
+    } catch (e: any) {
+      console.warn('Failed to sync user to sheet:', e);
+      toast({ variant: 'destructive', title: 'Cloud sync failed', description: e.message || 'Could not write to Google Sheets' });
+    }
   };
 
   const handleDeleteLocalUser = async (id: string) => {

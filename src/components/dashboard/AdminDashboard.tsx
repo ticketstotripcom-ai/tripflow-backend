@@ -428,7 +428,6 @@ const AdminDashboard = () => {
           <DashboardStats leads={filteredLeads} />
           <CustomerJourney leads={filteredLeads} />
           <MonthlyBookedReport leads={filteredLeads} />
-          <UpcomingTrips leads={filteredLeads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {

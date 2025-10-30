@@ -4,6 +4,7 @@ import { Users, TrendingUp, CheckCircle, Flame, Target, Calendar } from "lucide-
 import { isWorkingCategoryStatus, isBookedStatus } from "@/lib/leadStatus";
 import { useMemo, useState } from "react";
 import LeadDetailDialog from "./LeadDetailDialog"; // ✅ Changed import name
+import UpcomingTripsDialog from "./UpcomingTripsDialog";
 import HotLeadsDialog from "./HotLeadsDialog";
 import { parseFlexibleDate } from "@/lib/dateUtils";
 
@@ -197,7 +198,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
         </div>
       </div>
 
-      {selectedStat && selectedCategory !== 'hot' && (
+      {selectedStat && selectedCategory !== 'hot' && selectedCategory !== 'upcomingTrips' && (
         <LeadDetailDialog
           open={!!selectedCategory}
           onClose={() => setSelectedCategory(null)}
@@ -212,6 +213,14 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
           open={selectedCategory === 'hot'}
           onClose={() => setSelectedCategory(null)}
           leads={hotLeads}
+        />
+      )}
+
+      {selectedCategory === 'upcomingTrips' && (
+        <UpcomingTripsDialog
+          open={selectedCategory === 'upcomingTrips'}
+          onClose={() => setSelectedCategory(null)}
+          leads={upcomingTrips}
         />
       )}
     </>

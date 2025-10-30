@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, LayoutDashboard } from "lucide-react";
+import { stateManager } from "@/lib/stateManager";
 
 interface BottomNavigationProps {
   onDashboardClick?: () => void;
@@ -16,6 +17,16 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
 
   // Home: go to root ("/") just like top navigation
   const handleHome = () => {
+    // Always reset Home to Working tab and clear filters
+    stateManager.setActiveTab('working');
+    stateManager.setFilters({
+      statusFilter: 'All Statuses',
+      priorityFilter: 'All Priorities',
+      dateFilter: '',
+      dateFromFilter: '',
+      dateToFilter: '',
+      consultantFilter: 'All Consultants',
+    });
     navigate("/");
   };
 
@@ -24,6 +35,16 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
+      // Clear filters when going to dashboard analytics view
+      stateManager.setFilters({
+        statusFilter: 'All Statuses',
+        priorityFilter: 'All Priorities',
+        dateFilter: '',
+        dateFromFilter: '',
+        dateToFilter: '',
+        consultantFilter: 'All Consultants',
+      });
+      stateManager.setActiveTab('dashboard');
       navigate("/dashboard?view=analytics");
     }
   };
