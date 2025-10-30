@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import BottomNavigation from "@/components/BottomNavigation";
 import { authService } from "@/lib/authService";
 import { notificationService } from "@/lib/notificationService";
@@ -155,7 +155,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <HashRouter>
           <RouteEffects />
           <div className="pb-24 sm:pb-20">
             <Routes>
@@ -168,7 +168,7 @@ const App = () => {
             </Routes>
             <BottomNavigation />
           </div>
-        </BrowserRouter>
+        </HashRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );
