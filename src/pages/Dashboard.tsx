@@ -25,7 +25,10 @@ const Dashboard = () => {
   // Ensure Dashboard renders analytics-only views of dashboards
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('view') !== 'analytics') {
+    const view = params.get('view');
+    console.log('Dashboard mounted with view:', view);
+    if (view !== 'analytics') {
+      console.log('Redirecting to analytics view');
       navigate('/dashboard?view=analytics', { replace: true });
     }
   }, [location.search, navigate]);

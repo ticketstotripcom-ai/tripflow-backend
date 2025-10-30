@@ -19,12 +19,12 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     navigate("/");
   };
 
-  // Dashboard
+  // Dashboard - navigate directly to analytics view
   const handleDashboard = () => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate("/dashboard");
+      navigate("/dashboard?view=analytics");
     }
   };
 
