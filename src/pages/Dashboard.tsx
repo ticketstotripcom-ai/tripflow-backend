@@ -56,6 +56,13 @@ const Dashboard = () => {
     }
   }, [location.search, navigate]);
 
+  // Debug: log mounted view state for diagnostics
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const currentView = params.get('view') || 'analytics';
+    console.log('Dashboard mounted with view:', currentView);
+  }, [location.search]);
+
   const handleLogout = async () => {
     await authService.logout();
     navigate('/auth');
