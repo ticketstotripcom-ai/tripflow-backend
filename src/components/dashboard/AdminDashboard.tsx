@@ -53,7 +53,7 @@ const AdminDashboard = () => {
   const { toast } = useToast();
   const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
-  const fetchLeads = async (silent = false, forceRefresh = false) => {
+  const fetchLeads = async (silent = false, forceRefresh = false) => {
     try {
       setError(null);
       // Check cache first unless force refresh
@@ -67,12 +67,19 @@ const AdminDashboard = () => {
         }
       }
 
-      if (!silent) setLoading(true);
+      if (!silent) setLoading(true);
       
-      const credentials = await secureStorage.getCredentials();
-      if (!credentials) {
-        throw new Error('Google Sheets not configured');
-      }
+      const credentials = await secureStorage.getCredentials();
+      // Graceful analytics-only fallback when credentials are missing
+      if (!credentials || (!credentials.googleApiKey && !credentials.googleServiceAccountJson)) {
+        if (isAnalyticsOnly) {
+          // No creds in analytics-only mode: show empty analytics without error
+          setLeads([]);
+          if (!silent) setLoading(false);
+          return;
+        }
+        throw new Error('Google Sheets not configured');
+      }
 
       let data: SheetLead[] = [];
       if (credentials.sheets && credentials.sheets.length > 0) {
@@ -102,16 +109,16 @@ const AdminDashboard = () => {
         console.log('Background sync completed');
       }
     } catch (error: any) {
-      if (!silent) {
+      if (!silent && !isAnalyticsOnly) {
         toast({
           variant: "destructive",
           title: "Error fetching leads",
           description: error.message,
         });
-      } else {
+      } else {
         console.error('Background sync error:', error);
       }
-      if (!silent) setError(error.message || 'Failed to load dashboard data');
+      if (!silent && !isAnalyticsOnly) setError(error.message || 'Failed to load dashboard data');
     } finally {
       if (!silent) setLoading(false);
     }

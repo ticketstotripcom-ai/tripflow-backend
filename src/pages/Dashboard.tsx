@@ -38,6 +38,8 @@ const Dashboard = () => {
   const [theme, setTheme] = useState(themeService.getTheme());
   const navigate = useNavigate();
   const location = useLocation();
+  const viewParam = new URLSearchParams(location.search).get('view');
+  const isAnalyticsOnly = viewParam === 'analytics';
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
@@ -129,7 +131,11 @@ const Dashboard = () => {
       </div>
 
       <main className="w-full px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
-        {session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />}
+        {isAnalyticsOnly ? (
+          session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />
+        ) : (
+          <div className="text-sm text-muted-foreground">Preparing analytics…</div>
+        )}
         <Blackboard />
       </main>
 
