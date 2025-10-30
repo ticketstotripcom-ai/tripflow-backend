@@ -132,9 +132,13 @@ export class GoogleSheetsService {
 
   /** Fetch users */
   async fetchUsers(): Promise<SheetUser[]> {
-    const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
-    // Read full header + data and then drop header row explicitly
-    const range = `${worksheetName}!A:N`;
+    let worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
+    if (worksheetName.includes('!')) {
+      console.warn('⚠️ Invalid worksheetName passed with range:', worksheetName);
+      worksheetName = worksheetName.split('!')[0];
+    }
+    // Read the entire used range by specifying only the sheet name
+    const range = `${worksheetName}`;
 
     let url: string;
     let headers: Record<string, string> = {};

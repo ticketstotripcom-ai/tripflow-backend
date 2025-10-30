@@ -90,11 +90,14 @@ export async function useSheetService(): Promise<SheetService> {
     if (!res.ok) throw new Error(await res.text());
   };
 
-  const getRows = async (sheetName: string, range = 'A:Z') => {
+  const getRows = async (sheetName: string, _range?: string) => {
     if (!sheetName) throw new Error('Missing sheet name for read operation.');
-    const normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
-    const r = `${normalizedSheet}!${range}`;
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(r)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
+    let normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
+    if (normalizedSheet.includes('!')) {
+      console.warn('⚠️ Invalid sheetName passed with range:', normalizedSheet);
+      normalizedSheet = normalizedSheet.split('!')[0];
+    }
+    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
     const headers = await authHeaders();
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(await res.text());
