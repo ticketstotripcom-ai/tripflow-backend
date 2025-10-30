@@ -24,9 +24,10 @@ import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isCancelCateg
 import { compareDescByDate } from "@/lib/dateUtils";
 
 const AdminDashboard = () => {
-  const location = useLocation();
-  const viewParam = new URLSearchParams(location.search).get('view');
-  const isAnalyticsOnly = viewParam === 'analytics';
+  const location = useLocation();
+  const viewParam = new URLSearchParams(location.search).get('view');
+  const isAnalyticsOnly = viewParam === 'analytics';
+  console.log('AdminDashboard - view param:', viewParam, 'isAnalyticsOnly:', isAnalyticsOnly);
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
@@ -408,7 +409,7 @@ const AdminDashboard = () => {
 
       {isAnalyticsOnly ? (
         <div className="space-y-6">
-          {/* ✅ DashboardStats should respect current filters/search */}
+          {/* ✅ Analytics View: DashboardStats, CustomerJourney, MonthlyBookedReport */}
           <DashboardStats leads={filteredLeads} />
           <CustomerJourney leads={filteredLeads} />
           <MonthlyBookedReport leads={filteredLeads} />

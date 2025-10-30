@@ -44,13 +44,24 @@ const App = () => {
     const location = useLocation();
     useEffect(() => {
       if (location.pathname === '/dashboard') {
+        const params = new URLSearchParams(location.search);
+        const view = params.get('view');
+        console.log('Route effect - Dashboard with view:', view);
+        
+        // Clear filters for dashboard
         stateManager.setFilters({ statusFilter: 'All Statuses', priorityFilter: 'All Priorities', dateFilter: '', dateFromFilter: '', dateToFilter: '', consultantFilter: 'All Consultants' });
-        stateManager.setActiveTab('working');
+        
+        // Set appropriate tab based on view
+        if (view === 'analytics') {
+          stateManager.setActiveTab('dashboard');
+        } else {
+          stateManager.setActiveTab('working');
+        }
       }
       if (location.pathname === '/') {
         stateManager.setFilters({ statusFilter: 'All Statuses', priorityFilter: 'All Priorities', dateFilter: '', dateFromFilter: '', dateToFilter: '', consultantFilter: 'All Consultants' });
       }
-    }, [location.pathname]);
+    }, [location.pathname, location.search]);
     return null;
   };
 

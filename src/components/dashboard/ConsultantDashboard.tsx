@@ -24,9 +24,10 @@ import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isNewCategory
 import { compareDescByDate } from "@/lib/dateUtils";
 
 const ConsultantDashboard = () => {
-  const location = useLocation();
-  const viewParam = new URLSearchParams(location.search).get('view');
-  const isAnalyticsOnly = viewParam === 'analytics';
+  const location = useLocation();
+  const viewParam = new URLSearchParams(location.search).get('view');
+  const isAnalyticsOnly = viewParam === 'analytics';
+  console.log('ConsultantDashboard - view param:', viewParam, 'isAnalyticsOnly:', isAnalyticsOnly);
   const [leads, setLeads] = useState<SheetLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
@@ -388,6 +389,7 @@ const ConsultantDashboard = () => {
 
       {isAnalyticsOnly ? (
         <div className="space-y-6">
+          {/* ✅ Analytics View: DashboardStats, CustomerJourney, MonthlyBookedReport */}
           <DashboardStats leads={filteredLeads} />
           <CustomerJourney leads={filteredLeads} />
           <MonthlyBookedReport leads={filteredLeads} />
