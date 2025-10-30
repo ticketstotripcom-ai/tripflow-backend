@@ -72,11 +72,17 @@ export async function useSheetService(): Promise<SheetService> {
   };
 
   const appendRow = async (sheetName: string, row: any[]) => {
+    if (!sheetName) {
+      throw new Error('Missing sheet name for append operation.');
+    }
+    // Normalize known sheet names for case-sensitive ranges
+    const normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
     if (!serviceAccountJson) {
       throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
-    const range = `${sheetName}!A:Z`;
+    const range = `${normalizedSheet}!A:Z`;
     const token = await getAccessToken(serviceAccountJson);
+    console.log('✅ Using Service Account for Sheets write operation');
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
     const headers: Headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ values: [row] }) });
@@ -84,7 +90,9 @@ export async function useSheetService(): Promise<SheetService> {
   };
 
   const getRows = async (sheetName: string, range = 'A:Z') => {
-    const r = `${sheetName}!${range}`;
+    if (!sheetName) throw new Error('Missing sheet name for read operation.');
+    const normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
+    const r = `${normalizedSheet}!${range}`;
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(r)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
     const headers = await authHeaders();
     const res = await fetch(url, { headers });

@@ -259,12 +259,18 @@ const ConsultantDashboard = () => {
   // Left swipe = mark cancellation
   const handleSwipeLeft = async (lead: SheetLead) => {
     try {
-      const credentials = await secureStorage.getCredentials();
-      if (!credentials) throw new Error('Credentials not found');
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) throw new Error('Credentials not found');
 
-      const sheetsService = new GoogleSheetsService({
-        apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing');
+
+      const sheetsService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
@@ -277,6 +283,7 @@ const ConsultantDashboard = () => {
           : l
       ));
 
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, { status: 'Cancelled' });
       toast({
         title: "Lead Cancelled",

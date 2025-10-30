@@ -132,12 +132,19 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
     }
     try {
       setSaving(true);
-      const credentials = await secureStorage.getCredentials();
-      if (!credentials) throw new Error('Google Sheets credentials not configured.');
-      if (!credentials.googleServiceAccountJson) throw new Error('Service Account JSON is required.');
-      const sheetsService = new GoogleSheetsService({
-        apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) throw new Error('Google Sheets credentials not configured.');
+      // Fallback to localStorage for service account JSON
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) {
+        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+      }
+      const sheetsService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
@@ -156,6 +163,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
       onImmediateUpdate?.(optimisticLead);
       const wasBooked = (lead.status || '').toLowerCase().includes('booked');
       const nowBooked = (formData.status || '').toLowerCase().includes('booked');
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, dataToSave);
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
       if (!wasBooked && nowBooked) {

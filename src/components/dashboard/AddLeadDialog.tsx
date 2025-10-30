@@ -109,6 +109,7 @@ const AddLeadDialog = ({ open, onClose, onSuccess, onImmediateAdd }: AddLeadDial
       // Optimistically show new lead in UI immediately
       onImmediateAdd?.(newLead);
 
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.appendLead(newLead as any);
 
       toast({

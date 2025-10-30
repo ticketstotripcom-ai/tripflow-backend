@@ -32,7 +32,7 @@ export default function Blackboard() {
     try {
       setLoading(true);
       const svc = await useSheetService();
-      const rows = await svc.getRows('blackboard');
+      const rows = await svc.getRows('Blackboard');
       const parsed = (rows || [])
         .filter((r: any[]) => r && r.length)
         .map((r: any[]) => ({
@@ -69,7 +69,7 @@ export default function Blackboard() {
       const svc = await useSheetService();
       const now = new Date().toISOString();
       const id = uuid();
-      await svc.appendRow('blackboard', [id, content, session?.user.name || 'Admin', now]);
+      await svc.appendRow('Blackboard', [id, content, session?.user.name || 'Admin', now]);
       await notifyAll('New Blackboard Update', 'Admin posted a new announcement. Check your Dashboard.');
       setText('');
       await load();

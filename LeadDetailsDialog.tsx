@@ -133,10 +133,14 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
       setSaving(true);
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Google Sheets credentials not configured.');
-      if (!credentials.googleServiceAccountJson) throw new Error('Service Account JSON is required.');
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets/d/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
@@ -153,6 +157,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
         ...formData,
       };
       onImmediateUpdate?.(optimisticLead);
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, dataToSave);
       toast({ title: "✅ Lead updated successfully!", description: "Changes have been saved.", duration: 3000 });
       // Ask parent to force refresh so the updated lead reflects immediately

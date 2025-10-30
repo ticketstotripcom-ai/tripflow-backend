@@ -62,14 +62,21 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
         throw new Error('Google Sheets not configured');
       }
 
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing');
+
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
       });
 
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, {
         consultant: selectedConsultant,
       });

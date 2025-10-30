@@ -138,15 +138,21 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
     try {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Google Sheets credentials not configured.');
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing');
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings,
       });
       // Optimistic notify parent
       onPriorityUpdated?.(lead, value);
+      console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, { priority: value });
       toast({ title: 'Priority updated', description: `${lead.travellerName} → ${value}`, duration: 2500 });
     } catch (e: any) {

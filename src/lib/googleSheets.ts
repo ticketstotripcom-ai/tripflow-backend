@@ -365,6 +365,7 @@ export class GoogleSheetsService {
     }
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
     const range = `${worksheetName}!A:Z`;
+    console.log('✅ Using Service Account for Sheets write operation');
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
 
@@ -476,6 +477,7 @@ export class GoogleSheetsService {
     });
 
     const cm = this.config.columnMappings;
+    console.log('✅ Using Service Account for Sheets write operation');
     const token = await this.getAccessToken();
 
     const updateData: { range: string; values: any[][] }[] = [];

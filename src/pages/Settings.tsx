@@ -12,9 +12,11 @@ import { secureStorage, SecureCredentials } from "@/lib/secureStorage";
 import { GoogleSheetsService } from "@/lib/googleSheets";
 import { getLocalUsers, addLocalUser, deleteLocalUser, updateLocalUserRole, updateLocalUser, LocalUser } from "@/config/login";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSettings } from "@/lib/SettingsContext";
 
 const Settings = () => {
   const [googleApiKey, setGoogleApiKey] = useState("");
+  const { serviceAccountJson, setServiceAccountJson } = useSettings();
   const [googleServiceAccountJson, setGoogleServiceAccountJson] = useState("");
   const [sheetUrl, setSheetUrl] = useState("");
   const [worksheetNames, setWorksheetNames] = useState<string[]>(["MASTER DATA", "BACKEND SHEET"]);
@@ -63,32 +65,20 @@ const Settings = () => {
     loadLocalUsers();
   }, [navigate]);
 
-  // Persist Service Account JSON to localStorage for resilience on preview deployments
+  // Sync with global SettingsContext
   useEffect(() => {
-    try {
-      if (googleServiceAccountJson) {
-        localStorage.setItem('serviceAccountJson', googleServiceAccountJson);
-      }
-    } catch {}
-  }, [googleServiceAccountJson]);
-
-  // Bootstrap Service Account JSON from localStorage if secure storage is empty
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('serviceAccountJson');
-      if (stored && !googleServiceAccountJson) {
-        setGoogleServiceAccountJson(stored);
-      }
-    } catch {}
-    // run once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (serviceAccountJson && !googleServiceAccountJson) {
+      setGoogleServiceAccountJson(serviceAccountJson);
+    }
+  }, [serviceAccountJson]);
 
   const loadCredentials = async () => {
     const credentials = await secureStorage.getCredentials();
     if (credentials) {
       setGoogleApiKey(credentials.googleApiKey || "");
-      setGoogleServiceAccountJson(credentials.googleServiceAccountJson || "");
+      const json = credentials.googleServiceAccountJson || "";
+      setGoogleServiceAccountJson(json);
+      if (json) setServiceAccountJson(json);
       setSheetUrl(credentials.googleSheetUrl || "");
       setWorksheetNames(credentials.worksheetNames || ["MASTER DATA", "BACKEND SHEET"]);
       setColumnMappings(credentials.columnMappings || columnMappings);
@@ -188,13 +178,20 @@ const Settings = () => {
     try {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Sheets not configured');
+      // Ensure service account write uses localStorage fallback if needed
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing');
       const svc = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings,
       });
+      console.log('✅ Using Service Account for Sheets write operation');
       await svc.appendUser({
         name: created.name,
         email: created.email.trim().toLowerCase(),
@@ -282,7 +279,7 @@ const Settings = () => {
                 id="serviceAccount"
                 placeholder='{"type": "service_account", "project_id": "...", ...}'
                 value={googleServiceAccountJson}
-                onChange={(e) => setGoogleServiceAccountJson(e.target.value)}
+                onChange={(e) => { setGoogleServiceAccountJson(e.target.value); setServiceAccountJson(e.target.value); }}
                 rows={6}
                 className="font-mono text-xs"
               />

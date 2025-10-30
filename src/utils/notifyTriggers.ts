@@ -16,7 +16,7 @@ export const notifyUser = async (email: string, title: string, message: string, 
 
 export const notifyAll = async (title: string, message: string, type: AppNotification['type'] = 'general') => {
   const sheetService = await useSheetService();
-  const users = await sheetService.getRows('users');
+  const users = await sheetService.getRows('Users');
   for (const u of users) {
     const email = u?.[1] || u?.email || u?.Email || u?.E || u?.D; // best-effort mapping
     if (!email) continue;
@@ -29,7 +29,7 @@ export const notifyAll = async (title: string, message: string, type: AppNotific
 
 export const notifyAdmin = async (title: string, message: string) => {
   const sheetService = await useSheetService();
-  const users = await sheetService.getRows('users');
+  const users = await sheetService.getRows('Users');
   for (const u of users) {
     const role = (u?.role || u?.M || u?.[12] || '').toString().toLowerCase(); // column M per template
     const email = u?.[1] || u?.email || u?.Email || u?.E || u?.D;

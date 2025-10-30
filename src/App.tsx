@@ -20,6 +20,7 @@ import { stateManager } from "@/lib/stateManager";
 import { useSheetService } from "@/hooks/useSheetService";
 import { notifyAdmin, notifyAll, notifyUser } from "@/utils/notifyTriggers";
 import { parseFlexibleDate } from "@/lib/dateUtils";
+import { SettingsProvider } from "@/lib/SettingsContext";
 
 const queryClient = new QueryClient();
 
@@ -84,8 +85,8 @@ const App = () => {
         const raw = localStorage.getItem(STORAGE);
         const snap: Snapshot = raw ? JSON.parse(raw) : {};
 
-        // Build name→email map
-        const users = await svc.getRows('users');
+        // Build name→email map (Sheet name is case-sensitive)
+        const users = await svc.getRows('Users');
         const nameToEmail: Record<string, string> = {};
         users.forEach((r: any[]) => {
           const name = (r?.[2] || r?.name || '').toString().trim();
@@ -164,26 +165,28 @@ const App = () => {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <HashRouter>
-          <RouteEffects />
-          <div className="pb-24 sm:pb-20">
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/404" element={<NotFound />} />
-              <Route path="*" element={<Navigate to="/404" replace />} />
-            </Routes>
-            <BottomNavigation />
-          </div>
-        </HashRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <SettingsProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <HashRouter>
+            <RouteEffects />
+            <div className="pb-24 sm:pb-20">
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/404" element={<NotFound />} />
+                <Route path="*" element={<Navigate to="/404" replace />} />
+              </Routes>
+              <BottomNavigation />
+            </div>
+          </HashRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </SettingsProvider>
   );
 };
 
