@@ -28,6 +28,12 @@ const App = () => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    // One-time log for service account availability from localStorage
+    try {
+      const saved = localStorage.getItem('serviceAccountJson');
+      if (saved) console.log('✅ Loaded service account JSON from localStorage');
+    } catch {}
+
     (async () => {
       // Initialize all services
       await Promise.all([

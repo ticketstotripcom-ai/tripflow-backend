@@ -4,6 +4,11 @@ const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 type Headers = Record<string, string>;
 
+function normalizeSheetName(name: string): string {
+  if (!name) return '';
+  return name.includes('!') ? name.split('!')[0] : name;
+}
+
 async function getAccessToken(serviceAccountJson?: string): Promise<string> {
   if (!serviceAccountJson) throw new Error('Service Account JSON required');
   const serviceAccount = JSON.parse(serviceAccountJson);
@@ -75,10 +80,11 @@ export async function useSheetService(): Promise<SheetService> {
     if (!sheetName) {
       throw new Error('Missing sheet name for append operation.');
     }
-    // Normalize known sheet names for case-sensitive ranges
-    const normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
+    const normalizedSheet = normalizeSheetName(sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName));
     if (!serviceAccountJson) {
-      throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+      console.error('⚠️ Service Account JSON missing, using localStorage fallback');
+      try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
     const range = `${normalizedSheet}`;
     const token = await getAccessToken(serviceAccountJson);
@@ -92,17 +98,15 @@ export async function useSheetService(): Promise<SheetService> {
 
   const getRows = async (sheetName: string, _range?: string) => {
     if (!sheetName) throw new Error('Missing sheet name for read operation.');
-    let normalizedSheet = sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName);
-    if (normalizedSheet.includes('!')) {
-      console.warn('⚠️ Invalid sheetName passed with range:', normalizedSheet);
-      normalizedSheet = normalizedSheet.split('!')[0];
-    }
+    const normalizedSheet = normalizeSheetName(sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName));
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
     const headers = await authHeaders();
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    return (data.values || []) as any[][];
+    let values: any[][] = (data.values || []) as any[][];
+    if (values.length > 1) values = values.slice(1); // ✅ Skip header row universally
+    return values;
   };
 
   return { appendRow, getRows };

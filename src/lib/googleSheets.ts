@@ -55,12 +55,28 @@ export class GoogleSheetsService {
     this.config = config;
   }
 
+  /** Normalize sheet name by stripping any accidental range syntax */
+  private normalizeSheetName(name: string): string {
+    if (!name) return '';
+    return name.includes('!') ? name.split('!')[0] : name;
+  }
+
   /** Generate access token using Service Account JSON */
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
     if (!this.config.serviceAccountJson) {
-      throw new Error('Service Account JSON required for write operations.');
+      // Try localStorage fallback to reduce chances of missing credentials in previews
+      try {
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('serviceAccountJson') : undefined;
+        if (saved) {
+          console.warn('⚠️ Service Account JSON missing in config, using localStorage fallback');
+          this.config.serviceAccountJson = saved;
+        }
+      } catch {}
+      if (!this.config.serviceAccountJson) {
+        throw new Error('Service Account JSON required for write operations.');
+      }
     }
 
     const serviceAccount = JSON.parse(this.config.serviceAccountJson);
@@ -132,11 +148,7 @@ export class GoogleSheetsService {
 
   /** Fetch users */
   async fetchUsers(): Promise<SheetUser[]> {
-    let worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
-    if (worksheetName.includes('!')) {
-      console.warn('⚠️ Invalid worksheetName passed with range:', worksheetName);
-      worksheetName = worksheetName.split('!')[0];
-    }
+    let worksheetName = this.normalizeSheetName(this.config.worksheetNames[1] || 'BACKEND SHEET');
     // Read the entire used range by specifying only the sheet name
     const range = `${worksheetName}`;
 
@@ -156,10 +168,13 @@ export class GoogleSheetsService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
     const data = await response.json();
-    const rows: any[][] = data.values || [];
+    let rows: any[][] = data.values || [];
+
+    // ✅ Skip the header row
+    if (rows.length > 1) rows = rows.slice(1);
 
     // Map using fixed columns per spec: C,D,E,M,N (0-based: 2,3,4,12,13)
-    return rows.slice(1)
+    return rows
       .map((row: any[]) => ({
         name: String(row[2] ?? '').trim(),
         email: String(row[3] ?? '').trim(),
@@ -175,7 +190,7 @@ export class GoogleSheetsService {
     if (!this.config.serviceAccountJson) {
       throw new Error('Service Account JSON required to add users');
     }
-    const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
+    const worksheetName = this.normalizeSheetName(this.config.worksheetNames[1] || 'BACKEND SHEET');
     const range = `${worksheetName}`;
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
@@ -226,8 +241,8 @@ export class GoogleSheetsService {
 
     console.log('🔄 Fetching fresh leads from Google Sheets...');
     
-    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-    const range = `${worksheetName}!A2:AZ10000`;
+    const worksheetName = this.normalizeSheetName(this.config.worksheetNames[0] || 'MASTER DATA');
+    const range = `${worksheetName}`;
 
     let url: string;
     let headers: Record<string, string> = {};
@@ -245,7 +260,9 @@ export class GoogleSheetsService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`Failed to fetch leads: ${response.statusText}`);
     const data = await response.json();
-    const rows = data.values || [];
+    const allRows: any[][] = data.values || [];
+    // ✅ Skip header row
+    const rows: any[][] = allRows.length > 1 ? allRows.slice(1) : [];
     const cm = this.config.columnMappings;
 
     // ✅ CRITICAL FIX: Get the actual starting row from the range response
@@ -254,10 +271,10 @@ export class GoogleSheetsService {
     // Fetch with row metadata to get actual row numbers
     let actualRowNumbers: number[] = [];
     try {
-      // Use the spreadsheet.get API to get row data with metadata
+      // Use the spreadsheet.get API to get row data with metadata for the entire sheet
       const metadataUrl = this.config.serviceAccountJson
-        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue`
-        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(range)}&fields=sheets.data.rowData.values.effectiveValue&key=${this.config.apiKey}`;
+        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}&fields=sheets.data.rowData.values.effectiveValue`
+        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}&fields=sheets.data.rowData.values.effectiveValue&key=${this.config.apiKey}`;
 
       const metadataHeaders = this.config.serviceAccountJson
         ? { Authorization: `Bearer ${await this.getAccessToken()}` }
@@ -268,28 +285,28 @@ export class GoogleSheetsService {
         const metadataData = await metadataResponse.json();
         const rowData = metadataData.sheets?.[0]?.data?.[0]?.rowData || [];
         
-        // Map which rows have data (starting from row 2)
+        // Map which rows have data (skip header at index 0)
         rowData.forEach((row: any, index: number) => {
+          if (index === 0) return; // skip header row
           if (row.values && row.values.some((v: any) => v.effectiveValue)) {
-            actualRowNumbers.push(index + 2); // +2 because we start from A2
+            actualRowNumbers.push(index + 1); // actual sheet row number
           }
         });
         
-        console.log(`📊 Found ${actualRowNumbers.length} rows with data out of ${rowData.length} total rows`);
+        console.log(`📊 Found ${actualRowNumbers.length} data rows (excluding header) out of ${rowData.length} total rows`);
       }
     } catch (err) {
       console.warn('⚠️ Failed to fetch row metadata, falling back to sequential numbering:', err);
       // Fallback: assume sequential numbering
-      actualRowNumbers = rows.map((_: any, i: number) => i + 2);
+      actualRowNumbers = rows.map((_: any, i: number) => i + 2); // rows[] is header-sliced, so +2 is correct
     }
 
     // Optional notes
     let notesMap: Record<number, string> = {};
     try {
-      const notesRange = `${worksheetName}!C2:K10000`;
       const notesUrl = this.config.serviceAccountJson
-        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(notesRange)}&fields=sheets.data.rowData.values.note`
-        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(notesRange)}&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`;
+        ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}&fields=sheets.data.rowData.values.note`
+        : `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}&fields=sheets.data.rowData.values.note&key=${this.config.apiKey}`;
 
       const notesHeaders = this.config.serviceAccountJson
         ? { Authorization: `Bearer ${await this.getAccessToken()}` }
@@ -299,10 +316,11 @@ export class GoogleSheetsService {
         const notesData = await notesResponse.json();
         const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
         rowData.forEach((row: any, index: number) => {
+          if (index === 0) return; // skip header row
           const cellNotes: string[] = (row.values || [])
             .map((v: any) => (v && v.note ? String(v.note) : ''))
             .filter((s: string) => !!s);
-          if (cellNotes.length) notesMap[index] = cellNotes.join(' | ');
+          if (cellNotes.length) notesMap[index - 1] = cellNotes.join(' | '); // align with header-sliced rows
         });
       }
     } catch (err) {
@@ -369,7 +387,7 @@ export class GoogleSheetsService {
       console.log('📥 Offline: queued appendLead for later sync');
       return;
     }
-    const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
+    const worksheetName = this.normalizeSheetName(this.config.worksheetNames[0] || 'MASTER DATA');
     const range = `${worksheetName}`;
     console.log(`✅ Appending to sheet: ${worksheetName}`);
     console.log('✅ Using Service Account for Sheets write operation');
@@ -503,7 +521,7 @@ export class GoogleSheetsService {
         value = formatSheetDate(value);
       }
 
-      const cellRange = `${this.config.worksheetNames[0]}!${col}${rowNumber}`;
+      const cellRange = `${this.normalizeSheetName(this.config.worksheetNames[0])}!${col}${rowNumber}`;
       updateData.push({ 
         range: cellRange, 
         values: [[value]] 
