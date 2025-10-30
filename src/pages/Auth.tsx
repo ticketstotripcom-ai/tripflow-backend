@@ -16,9 +16,9 @@ const Auth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Redirect if already logged in
+    // Redirect if already logged in → go to Home
     if (authService.isAuthenticated()) {
-      navigate("/dashboard");
+      navigate("/");
     }
   }, [navigate]);
 
@@ -37,7 +37,8 @@ const Auth = () => {
         title: "Welcome back!",
         description: `Logged in as ${session.user.role}`
       });
-      navigate("/dashboard");
+      // After login land on Home (leads) by default
+      navigate("/");
     } catch (error: any) {
       toast({
         variant: "destructive",
