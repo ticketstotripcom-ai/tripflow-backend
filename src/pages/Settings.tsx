@@ -12,12 +12,13 @@ import { secureStorage, SecureCredentials } from "@/lib/secureStorage";
 import { GoogleSheetsService } from "@/lib/googleSheets";
 import { getLocalUsers, addLocalUser, deleteLocalUser, updateLocalUserRole, updateLocalUser, LocalUser } from "@/config/login";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useSettings } from "@/lib/SettingsContext";
+import { useSettings, sanitizeServiceAccountJson } from "@/lib/SettingsContext";
 
 const Settings = () => {
   const [googleApiKey, setGoogleApiKey] = useState("");
   const { serviceAccountJson, setServiceAccountJson } = useSettings();
   const [googleServiceAccountJson, setGoogleServiceAccountJson] = useState("");
+  const [isJsonValid, setIsJsonValid] = useState(true);
   const [sheetUrl, setSheetUrl] = useState("");
   const [worksheetNames, setWorksheetNames] = useState<string[]>(["MASTER DATA", "BACKEND SHEET"]);
   const [columnMappings, setColumnMappings] = useState<Record<string, string>>({
@@ -68,7 +69,11 @@ const Settings = () => {
   // Sync with global SettingsContext
   useEffect(() => {
     if (serviceAccountJson && !googleServiceAccountJson) {
-      setGoogleServiceAccountJson(serviceAccountJson);
+      try {
+        setGoogleServiceAccountJson(JSON.stringify(serviceAccountJson, null, 2));
+      } catch {
+        // no-op
+      }
     }
   }, [serviceAccountJson]);
 
@@ -78,7 +83,15 @@ const Settings = () => {
       setGoogleApiKey(credentials.googleApiKey || "");
       const json = credentials.googleServiceAccountJson || "";
       setGoogleServiceAccountJson(json);
-      if (json) setServiceAccountJson(json);
+      if (json) {
+        const parsed = sanitizeServiceAccountJson(json);
+        if (parsed) {
+          setServiceAccountJson(parsed);
+          try { localStorage.setItem('serviceAccountJson', JSON.stringify(parsed)); } catch {}
+        } else {
+          console.warn('⚠️ Failed to parse service account JSON from secure storage');
+        }
+      }
       setSheetUrl(credentials.googleSheetUrl || "");
       setWorksheetNames(credentials.worksheetNames || ["MASTER DATA", "BACKEND SHEET"]);
       setColumnMappings(credentials.columnMappings || columnMappings);
@@ -128,9 +141,22 @@ const Settings = () => {
       return;
     }
 
+    // Sanitize Service Account JSON before saving
+    let sanitizedServiceAccount: any | null = null;
+    if (googleServiceAccountJson && googleServiceAccountJson.trim()) {
+      sanitizedServiceAccount = sanitizeServiceAccountJson(googleServiceAccountJson);
+      if (!sanitizedServiceAccount) {
+        toast({ variant: "destructive", title: "Invalid Service Account JSON", description: "Please paste a valid Google Service Account key (JSON)." });
+        return;
+      }
+      // Persist to localStorage for fallback and set in context
+      try { localStorage.setItem('serviceAccountJson', JSON.stringify(sanitizedServiceAccount)); } catch {}
+      setServiceAccountJson(sanitizedServiceAccount);
+    }
+
     const credentials: SecureCredentials = {
       googleApiKey: googleApiKey || undefined,
-      googleServiceAccountJson: googleServiceAccountJson || undefined,
+      googleServiceAccountJson: sanitizedServiceAccount ? JSON.stringify(sanitizedServiceAccount) : undefined,
       googleSheetUrl: sheetUrl,
       worksheetNames,
       columnMappings,
@@ -279,13 +305,26 @@ const Settings = () => {
                 id="serviceAccount"
                 placeholder='{"type": "service_account", "project_id": "...", ...}'
                 value={googleServiceAccountJson}
-                onChange={(e) => { setGoogleServiceAccountJson(e.target.value); setServiceAccountJson(e.target.value); }}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setGoogleServiceAccountJson(val);
+                  const parsed = sanitizeServiceAccountJson(val);
+                  const valid = !!parsed || val.trim() === '';
+                  setIsJsonValid(valid);
+                  if (parsed) {
+                    try { localStorage.setItem('serviceAccountJson', JSON.stringify(parsed)); } catch {}
+                    setServiceAccountJson(parsed);
+                  }
+                }}
                 rows={6}
                 className="font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
                 Required for adding/updating leads. Paste the entire JSON from your service account file.
               </p>
+              {(!googleServiceAccountJson.trim() || !isJsonValid) && (
+                <p className="text-xs text-amber-600">⚠️ Invalid JSON detected. Please paste a valid Google Service Account key (JSON).</p>
+              )}
             </div>
           </CardContent>
         </Card>

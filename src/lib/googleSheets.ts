@@ -5,7 +5,8 @@ import { enqueue } from './offlineQueue';
 
 export interface GoogleSheetsConfig {
   apiKey?: string;
-  serviceAccountJson?: string;
+  // Can be a raw JSON string or a parsed object
+  serviceAccountJson?: any;
   sheetId: string;
   worksheetNames: string[];
   columnMappings: Record<string, string>;
@@ -43,16 +44,84 @@ export interface SheetLead {
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
+// Optional safe fallback for Node-style Google client usage
+export function getAuthorizedClient(serviceAccountJson: any) {
+  try {
+    if (!serviceAccountJson) throw new Error('Missing service account JSON');
+    // @ts-ignore - `google` may not be available in this environment; this is an optional helper
+    return new google.auth.JWT({
+      email: serviceAccountJson.client_email,
+      key: String(serviceAccountJson.private_key || '').replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+  } catch (err) {
+    console.error('❌ Failed to build JWT client:', err);
+    return null;
+  }
+}
+
+// Local sanitizer to avoid cross-module imports
+function sanitizeServiceAccountJsonLocal(raw: string) {
+  if (!raw) return null;
+  try {
+    let fixed = String(raw).trim();
+    if (fixed.startsWith('"') && fixed.endsWith('"')) {
+      fixed = JSON.parse(fixed);
+    }
+    const obj = JSON.parse(
+      fixed
+        .replace(/\\n/g, '\n')
+        .replace(/\r/g, '')
+    );
+    if (obj && typeof obj === 'object' && obj.private_key) {
+      obj.private_key = String(obj.private_key).replace(/\\n/g, '\n').replace(/\r/g, '');
+    }
+    return obj;
+  } catch (e) {
+    return null;
+  }
+}
+
 export class GoogleSheetsService {
   private config: GoogleSheetsConfig;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  private parsedServiceAccount: any | null = null;
   
   private leadsCache: { data: SheetLead[]; timestamp: number } | null = null;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor(config: GoogleSheetsConfig) {
     this.config = config;
+  }
+
+  /** Ensure and return parsed Service Account object, with localStorage fallback */
+  private getParsedServiceAccount(): any | null {
+    let sa = this.config.serviceAccountJson;
+
+    // If missing, try localStorage fallback to reduce chances of missing credentials in previews
+    if (!sa && typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('serviceAccountJson');
+        if (saved) {
+          sa = saved;
+        }
+      } catch {}
+    }
+
+    if (!sa) return null;
+
+    if (typeof sa === 'string') {
+      const parsed = sanitizeServiceAccountJsonLocal(sa);
+      if (!parsed) return null;
+      this.config.serviceAccountJson = parsed;
+      this.parsedServiceAccount = parsed;
+      return parsed;
+    }
+
+    // Already an object
+    this.parsedServiceAccount = sa;
+    return sa;
   }
 
   /** Normalize sheet name by stripping any accidental range syntax */
@@ -65,21 +134,13 @@ export class GoogleSheetsService {
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
-    if (!this.config.serviceAccountJson) {
-      // Try localStorage fallback to reduce chances of missing credentials in previews
-      try {
-        const saved = typeof window !== 'undefined' ? localStorage.getItem('serviceAccountJson') : undefined;
-        if (saved) {
-          console.warn('⚠️ Service Account JSON missing in config, using localStorage fallback');
-          this.config.serviceAccountJson = saved;
-        }
-      } catch {}
-      if (!this.config.serviceAccountJson) {
-        throw new Error('Service Account JSON required for write operations.');
-      }
+    const serviceAccount = this.getParsedServiceAccount();
+    if (!serviceAccount || !serviceAccount.private_key) {
+      console.error('❌ Missing or invalid service account JSON');
+      throw new Error('Service account JSON invalid or missing');
     }
+    console.log('✅ Using valid service account credentials');
 
-    const serviceAccount = JSON.parse(this.config.serviceAccountJson);
     const now = Math.floor(Date.now() / 1000);
     const expiry = now + 3600;
 
@@ -98,7 +159,8 @@ export class GoogleSheetsService {
     const payloadEncoded = base64url(JSON.stringify(payload));
     const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
 
-    const privateKey = serviceAccount.private_key
+    const privateKey = String(serviceAccount.private_key)
+      .replace(/\\n/g, '\n')
       .replace('-----BEGIN PRIVATE KEY-----', '')
       .replace('-----END PRIVATE KEY-----', '')
       .replace(/\s/g, '');
@@ -156,6 +218,12 @@ export class GoogleSheetsService {
     let headers: Record<string, string> = {};
     // Prefer service account if available (works for private sheets)
     if (this.config.serviceAccountJson) {
+      const sa = this.getParsedServiceAccount();
+      if (!sa || !sa.private_key) {
+        console.error('❌ Missing or invalid service account JSON');
+        throw new Error('Service account JSON invalid or missing');
+      }
+      console.log('✅ Using valid service account credentials');
       const token = await this.getAccessToken();
       url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
       headers['Authorization'] = `Bearer ${token}`;
@@ -190,6 +258,12 @@ export class GoogleSheetsService {
     if (!this.config.serviceAccountJson) {
       throw new Error('Service Account JSON required to add users');
     }
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) {
+      console.error('❌ Missing or invalid service account JSON');
+      throw new Error('Service account JSON invalid or missing');
+    }
+    console.log('✅ Using valid service account credentials');
     const worksheetName = this.normalizeSheetName(this.config.worksheetNames[1] || 'BACKEND SHEET');
     const range = `${worksheetName}`;
     const token = await this.getAccessToken();
@@ -248,6 +322,12 @@ export class GoogleSheetsService {
     let headers: Record<string, string> = {};
     // Prefer service account if available (works for private sheets)
     if (this.config.serviceAccountJson) {
+      const sa = this.getParsedServiceAccount();
+      if (!sa || !sa.private_key) {
+        console.error('❌ Missing or invalid service account JSON');
+        throw new Error('Service account JSON invalid or missing');
+      }
+      console.log('✅ Using valid service account credentials');
       const token = await this.getAccessToken();
       url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}`;
       headers['Authorization'] = `Bearer ${token}`;
@@ -391,6 +471,12 @@ export class GoogleSheetsService {
     const range = `${worksheetName}`;
     console.log(`✅ Appending to sheet: ${worksheetName}`);
     console.log('✅ Using Service Account for Sheets write operation');
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) {
+      console.error('❌ Missing or invalid service account JSON');
+      throw new Error('Service account JSON invalid or missing');
+    }
+    console.log('✅ Using valid service account credentials');
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
 
@@ -503,6 +589,12 @@ export class GoogleSheetsService {
 
     const cm = this.config.columnMappings;
     console.log('✅ Using Service Account for Sheets write operation');
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) {
+      console.error('❌ Missing or invalid service account JSON');
+      throw new Error('Service account JSON invalid or missing');
+    }
+    console.log('✅ Using valid service account credentials');
     const token = await this.getAccessToken();
 
     const updateData: { range: string; values: any[][] }[] = [];
