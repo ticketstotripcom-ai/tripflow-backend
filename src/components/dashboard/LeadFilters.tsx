@@ -128,6 +128,25 @@ const LeadFilters = ({
         />
       </div>
 
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">From</Label>
+        <Input
+          type="date"
+          value={dateFromFilter}
+          onChange={(e) => onDateRangeChange?.(e.target.value, dateToFilter)}
+          className="h-9"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">To</Label>
+        <Input
+          type="date"
+          value={dateToFilter}
+          onChange={(e) => onDateRangeChange?.(dateFromFilter, e.target.value)}
+          className="h-9"
+        />
+      </div>
+
       {showConsultantFilter && onConsultantChange && (
         <div className="space-y-2">
           <Label className="text-xs font-medium">Consultant</Label>
