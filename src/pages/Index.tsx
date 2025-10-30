@@ -3,10 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { authService } from "@/lib/authService";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import ConsultantDashboard from "@/components/dashboard/ConsultantDashboard";
+import AppHeader from "@/components/AppHeader";
+import { themeService } from "@/lib/themeService";
 
 const Index = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState(authService.getSession());
+  const [theme, setTheme] = useState(themeService.getTheme());
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
@@ -24,6 +27,13 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20">
+      <AppHeader
+        session={session as any}
+        theme={theme}
+        onToggleTheme={async () => setTheme(await themeService.toggleTheme())}
+        onSettings={session.user.role === 'admin' ? () => navigate('/settings') : undefined}
+        onLogout={async () => { await authService.logout(); navigate('/auth'); }}
+      />
       <main className="w-full px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
         {session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />}
       </main>

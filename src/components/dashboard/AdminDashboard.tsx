@@ -14,6 +14,7 @@ import AssignLeadDialog from "./AssignLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
 import DashboardStats from "./DashboardStats";
+import UpcomingTrips from "./UpcomingTrips";
 import MonthlyBookedReport from "./MonthlyBookedReport";
 import CustomerJourney from "./CustomerJourney";
 import PullToRefresh from "@/components/PullToRefresh";
@@ -45,11 +46,11 @@ const AdminDashboard = () => {
   const [dateFromFilter, setDateFromFilter] = useState(savedFilters.dateFromFilter || '');
   const [dateToFilter, setDateToFilter] = useState(savedFilters.dateToFilter || '');
   const [consultantFilter, setConsultantFilter] = useState(savedFilters.consultantFilter);
-  const [activeTab, setActiveTab] = useState(() => {
-    if (isAnalyticsOnly) return "dashboard";
-    const saved = stateManager.getActiveTab();
-    return saved || "new";
-  });
+  const [activeTab, setActiveTab] = useState(() => {
+    if (isAnalyticsOnly) return "dashboard";
+    const saved = stateManager.getActiveTab();
+    return saved || "working";
+  });
   const { toast } = useToast();
   const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
@@ -342,6 +343,13 @@ const AdminDashboard = () => {
               showAssignButton={true}
               onSwipeLeft={handleSwipeLeft}
               onSwipeRight={handleSwipeRight}
+              onPriorityUpdated={(l, p) => {
+                setLeads(prev => prev.map(x => (
+                  x.tripId === l.tripId && x.travellerName === l.travellerName && x.dateAndTime === l.dateAndTime
+                    ? { ...x, priority: p }
+                    : x
+                )));
+              }}
             />
           )}
         />
@@ -416,10 +424,11 @@ const AdminDashboard = () => {
 
       {isAnalyticsOnly ? (
         <div className="space-y-6">
-          {/* ✅ Analytics View: DashboardStats, CustomerJourney, MonthlyBookedReport */}
+          {/* ✅ Analytics View: DashboardStats, CustomerJourney, MonthlyBookedReport, UpcomingTrips */}
           <DashboardStats leads={filteredLeads} />
           <CustomerJourney leads={filteredLeads} />
           <MonthlyBookedReport leads={filteredLeads} />
+          <UpcomingTrips leads={filteredLeads} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={(tab) => {

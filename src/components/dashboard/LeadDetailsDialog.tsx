@@ -236,6 +236,23 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
             </Select>
           </div>
 
+          <div className="space-y-2">
+            <Label>Priority</Label>
+            <Select
+              value={(formData.priority || 'medium').toLowerCase()}
+              onValueChange={(value) => setFormData({ ...formData, priority: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">🔴 High</SelectItem>
+                <SelectItem value="medium">🟡 Medium</SelectItem>
+                <SelectItem value="low">🟢 Low</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>

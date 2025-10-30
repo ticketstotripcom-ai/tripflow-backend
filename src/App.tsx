@@ -60,6 +60,8 @@ const App = () => {
       }
       if (location.pathname === '/') {
         stateManager.setFilters({ statusFilter: 'All Statuses', priorityFilter: 'All Priorities', dateFilter: '', dateFromFilter: '', dateToFilter: '', consultantFilter: 'All Consultants' });
+        // Default Home to Working tab
+        stateManager.setActiveTab('working');
       }
     }, [location.pathname, location.search]);
     return null;

@@ -118,8 +118,17 @@ const LeadFilters = ({
         <DateRangePicker
           value={rangeValue}
           onChange={(r) => {
-            const from = r?.from ? r.from.toISOString().slice(0, 10) : '';
-            const to = r?.to ? r.to.toISOString().slice(0, 10) : '';
+            const toYMD = (d?: Date) => {
+              if (!d) return '';
+              const local = new Date(d);
+              local.setHours(0,0,0,0);
+              const y = local.getFullYear();
+              const m = String(local.getMonth() + 1).padStart(2, '0');
+              const day = String(local.getDate()).padStart(2, '0');
+              return `${y}-${m}-${day}`;
+            };
+            const from = toYMD(r?.from);
+            const to = toYMD(r?.to);
             // Clear old exact date when using range
             onDateFilterChange('');
             onDateRangeChange?.(from, to);

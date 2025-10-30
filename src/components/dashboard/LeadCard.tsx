@@ -1,12 +1,16 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Phone, Mail, MessageCircle, Calendar, MapPin, Users, Moon, CheckCircle, Bell, XCircle, Clock } from "lucide-react";
-import { SheetLead } from "@/lib/googleSheets";
+// SheetLead imported below with GoogleSheetsService
 import { useState } from "react";
 import { useSwipeable } from "react-swipeable";
 import WhatsAppTemplateDialog from "./WhatsAppTemplateDialog";
 import { formatDisplayDate, isPast, parseFlexibleDate } from "@/lib/dateUtils";
+import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
+import { secureStorage } from "@/lib/secureStorage";
+import { useToast } from "@/hooks/use-toast";
 
 interface LeadCardProps {
   lead: SheetLead;
@@ -15,6 +19,7 @@ interface LeadCardProps {
   showAssignButton?: boolean;
   onSwipeLeft?: (lead: SheetLead) => void;
   onSwipeRight?: (lead: SheetLead) => void;
+  onPriorityUpdated?: (lead: SheetLead, newPriority: string) => void;
 }
 
 // Date formatting is unified via dateUtils
@@ -70,14 +75,16 @@ const getStatusColor = (status: string): string => {
   return 'bg-gray-500';
 };
 
-export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, onSwipeLeft, onSwipeRight }: LeadCardProps) => {
+export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, onSwipeLeft, onSwipeRight, onPriorityUpdated }: LeadCardProps) => {
   const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isCancelled, setIsCancelled] = useState(false);
   const [reminderSet, setReminderSet] = useState(false);
-  const priority = lead.priority?.toLowerCase() || 'medium';
+  const [localPriority, setLocalPriority] = useState<string>(lead.priority?.toLowerCase() || 'medium');
+  const priority = localPriority;
   const progress = getStatusProgress(lead.status);
   const cardBg = getCardBackgroundByStatus(lead.status, priority);
+  const { toast } = useToast();
 
   const handlers = useSwipeable({
     onSwiping: (eventData) => {
@@ -124,6 +131,29 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
   const handleAssign = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onAssign) onAssign();
+  };
+
+  const handlePriorityChange = async (value: string) => {
+    setLocalPriority(value);
+    try {
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) throw new Error('Google Sheets credentials not configured.');
+      const sheetsService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey,
+        serviceAccountJson: credentials.googleServiceAccountJson,
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings,
+      });
+      // Optimistic notify parent
+      onPriorityUpdated?.(lead, value);
+      await sheetsService.updateLead(lead, { priority: value });
+      toast({ title: 'Priority updated', description: `${lead.travellerName} → ${value}`, duration: 2500 });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Failed to update priority', description: e.message || 'Unknown error', duration: 4000 });
+      // revert UI if failed
+      setLocalPriority(lead.priority?.toLowerCase() || 'medium');
+    }
   };
 
   return (
@@ -232,16 +262,29 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
               Unassigned
             </div>
           )}
-          {showAssignButton && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-6 text-xs"
-              onClick={handleAssign}
-            >
-              {lead.consultant ? 'Reassign' : 'Assign'}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block text-muted-foreground">Priority</div>
+            <Select value={priority} onValueChange={handlePriorityChange}>
+              <SelectTrigger className="h-7 w-[110px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">🔴 High</SelectItem>
+                <SelectItem value="medium">🟡 Medium</SelectItem>
+                <SelectItem value="low">🟢 Low</SelectItem>
+              </SelectContent>
+            </Select>
+            {showAssignButton && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-6 text-xs"
+                onClick={handleAssign}
+              >
+                {lead.consultant ? 'Reassign' : 'Assign'}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex gap-1 sm:gap-2 pt-2 border-t">

@@ -43,7 +43,7 @@ const HotLeadsDialog = ({ open, onClose, leads }: HotLeadsDialogProps) => {
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle className="text-2xl text-orange-600 flex items-center gap-2">
               <Flame className="h-6 w-6" />
-              Hot Leads ({leads.length})
+              Hot + Negotiations ({leads.length})
             </DialogTitle>
           </DialogHeader>
 

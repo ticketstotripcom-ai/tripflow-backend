@@ -41,12 +41,23 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   }, [leads]);
 
   // 🔥 HOT LEADS
-  const hotLeads = useMemo(() =>
-    leads.filter(lead =>
-      (lead.status || "").toLowerCase().includes("hot")
-    ),
-    [leads]
-  );
+  const hotLeads = useMemo(() => {
+    const list = leads.filter(lead => {
+      const s = (lead.status || "").toLowerCase();
+      return s.includes("hot") || s.includes("negotiations");
+    });
+    return list
+      .slice()
+      .sort((a, b) => {
+        const ta = parseFlexibleDate(a.travelDate) || parseFlexibleDate(a.dateAndTime) || new Date(0);
+        const tb = parseFlexibleDate(b.travelDate) || parseFlexibleDate(b.dateAndTime) || new Date(0);
+        // Prefer more recent first if using dateAndTime, otherwise nearer travel date first
+        const aIsTravel = !!parseFlexibleDate(a.travelDate);
+        const bIsTravel = !!parseFlexibleDate(b.travelDate);
+        if (aIsTravel && bIsTravel) return (ta.getTime() - tb.getTime()); // ascending by travel date
+        return tb.getTime() - ta.getTime(); // descending by last updated/created
+      });
+  }, [leads]);
 
   const totalLeads = leads.length;
   const conversionRate = totalLeads > 0 ? ((bookedLeads.length / totalLeads) * 100).toFixed(1) : '0';
@@ -67,8 +78,8 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
       title: "Working On",
       value: workingLeads.length,
       icon: TrendingUp,
-      color: "text-warning",
-      bgColor: "bg-yellow-50 dark:bg-yellow-950/20",
+      color: "text-teal-600",
+      bgColor: "bg-teal-50 dark:bg-teal-950/20",
       category: 'working' as StatCategory,
       leads: workingLeads,
     },
