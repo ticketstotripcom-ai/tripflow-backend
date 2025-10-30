@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, Component, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, Settings } from "lucide-react";
@@ -9,6 +9,29 @@ import { authService } from "@/lib/authService";
 import { themeService } from "@/lib/themeService";
 import { Moon, Sun } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, message: error?.message || "Unknown error" };
+  }
+  componentDidCatch(error: any) {
+    console.error("Dashboard error:", error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20 flex items-center justify-center">
+          <p className="text-red-500">Failed to load dashboard data.</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const Dashboard = () => {
   const [session, setSession] = useState(authService.getSession());
@@ -28,10 +51,17 @@ const Dashboard = () => {
     const view = params.get('view');
     console.log('Dashboard mounted with view:', view);
     if (view !== 'analytics') {
-      console.log('Redirecting to analytics view');
+      console.log('Redirecting to /dashboard?view=analytics');
       navigate('/dashboard?view=analytics', { replace: true });
     }
   }, [location.search, navigate]);
+
+  // Debug: log mounted view state for diagnostics
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const currentView = params.get('view') || 'analytics';
+    console.log('Dashboard mounted with view:', currentView);
+  }, [location.search]);
 
   const handleLogout = async () => {
     await authService.logout();
@@ -52,6 +82,7 @@ const Dashboard = () => {
   }
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20">
       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10 shadow-soft">
         <div className="w-full px-2 sm:px-4 py-3 sm:py-4">
@@ -104,6 +135,7 @@ const Dashboard = () => {
 
       {/* BottomNavigation is rendered globally in App.tsx */}
     </div>
+    </ErrorBoundary>
   );
 };
 

@@ -54,7 +54,7 @@ const Settings = () => {
   useEffect(() => {
     const session = authService.getSession();
     if (!session || session.user.role !== 'admin') {
-      navigate('/dashboard');
+      navigate('/dashboard?view=analytics');
       return;
     }
 
@@ -545,7 +545,7 @@ const Settings = () => {
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button onClick={() => navigate('/dashboard')} variant="outline">
+          <Button onClick={() => navigate('/dashboard?view=analytics')} variant="outline">
             Back to Dashboard
           </Button>
           <Button onClick={handleSave}>

@@ -35,6 +35,7 @@ const ConsultantDashboard = () => {
   const [reminderLead, setReminderLead] = useState<{ id: string; name: string } | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
   const savedFilters = stateManager.getFilters();
   const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
@@ -52,7 +53,8 @@ const ConsultantDashboard = () => {
   const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
   const fetchLeads = async (silent = false, forceRefresh = false) => {
-    try {
+    try {
+      setError(null);
       // Check cache first unless force refresh
       if (!forceRefresh) {
         const cached = stateManager.getCachedLeads();
@@ -107,7 +109,7 @@ const ConsultantDashboard = () => {
       if (silent) {
         console.log('Background sync completed');
       }
-    } catch (error: any) {
+    } catch (error: any) {
       if (!silent) {
         toast({
           variant: "destructive",
@@ -117,6 +119,7 @@ const ConsultantDashboard = () => {
       } else {
         console.error('Background sync error:', error);
       }
+      if (!silent) setError(error.message || 'Failed to load dashboard data');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -350,7 +353,11 @@ const ConsultantDashboard = () => {
         </div>
       </div>
 
-      <SearchBar value={searchQuery} onChange={(query) => {
+      {error && (
+        <p className="text-red-500 text-sm">Failed to load dashboard data.</p>
+      )}
+
+      <SearchBar value={searchQuery} onChange={(query) => {
         setSearchQuery(query);
         stateManager.setSearchQuery(query);
       }} />

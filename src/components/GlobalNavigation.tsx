@@ -15,7 +15,7 @@ const GlobalNavigation = () => {
   };
 
   const handleDashboard = () => {
-    navigate("/dashboard");
+    navigate("/dashboard?view=analytics");
   };
 
   return (
