@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { isBookedStatus, isCancelCategoryStatus, isNewCategoryStatus, normalizeStatus } from "@/lib/leadStatus";
-import { Calendar, Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
+import { Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
+import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
 import { parseFlexibleDate, formatDisplayDate, extractAnyDateFromText } from "@/lib/dateUtils";
 
 type Mode = "consultant" | "admin";
@@ -43,17 +43,7 @@ interface Metrics {
   };
 }
 
-function toISODate(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function sameDay(a: Date | null, b: Date | null): boolean {
-  if (!a || !b) return false;
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
+// Date helpers now handled via range only
 
 function computeMetrics(leads: SheetLead[]): Metrics {
   const total = leads.length;
@@ -186,7 +176,12 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   const session = authService.getSession();
   const { toast } = useToast();
 
-  const [selectedDate, setSelectedDate] = useState<string>(() => toISODate(new Date()));
+  // Default to today's single-day range
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return { from: new Date(today), to: new Date(today) };
+  });
   const [notes, setNotes] = useState<string>("");
   const [selectionMode, setSelectionMode] = useState<"me" | "full" | "custom">("me");
   const [selectedConsultants, setSelectedConsultants] = useState<Record<string, boolean>>({});
@@ -201,15 +196,20 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
     }
   }, [mode, consultants]);
 
-  const selectedDay = useMemo(() => new Date(`${selectedDate}T00:00:00`), [selectedDate]);
+  const hasRange = !!dateRange.from || !!dateRange.to;
 
   const leadsForDay = useMemo(() => {
+    const from = dateRange.from ? new Date(dateRange.from.setHours(0, 0, 0, 0)) : null;
+    const to = dateRange.to ? new Date(dateRange.to.setHours(23, 59, 59, 999)) : null;
     return leads.filter((l) => {
-      const noteDate = extractAnyDateFromText(l.notes);
-      if (noteDate) return sameDay(noteDate, selectedDay);
-      return sameDay(parseFlexibleDate(l.dateAndTime), selectedDay);
+      const nd = extractAnyDateFromText(l.notes) || parseFlexibleDate(l.dateAndTime);
+      if (!nd) return false;
+      const t = nd.getTime();
+      if (from && t < from.getTime()) return false;
+      if (to && t > to.getTime()) return false;
+      return true;
     });
-  }, [leads, selectedDay]);
+  }, [leads, dateRange]);
 
   const myName = session?.user?.name || "";
 
@@ -266,7 +266,17 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
     window.open(`https://wa.me/?text=${encoded}`, "_blank");
   };
 
-  const dateDisplay = useMemo(() => formatDisplayDate(selectedDay), [selectedDay]);
+  const dateDisplay = useMemo(() => {
+    const from = dateRange.from || null;
+    const to = dateRange.to || null;
+    if (from && to) {
+      const same = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth() && from.getDate() === to.getDate();
+      return same ? formatDisplayDate(from) : `${formatDisplayDate(from)} - ${formatDisplayDate(to)}`;
+    }
+    if (from) return `From ${formatDisplayDate(from)}`;
+    if (to) return `Until ${formatDisplayDate(to)}`;
+    return 'All Dates';
+  }, [dateRange]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -285,18 +295,8 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs">Date</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="h-9"
-                  />
-                  <Button variant="outline" size="icon" onClick={() => setSelectedDate(toISODate(new Date()))}>
-                    <Calendar className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Label className="text-xs">Date Range</Label>
+                <DateRangePicker value={dateRange} onChange={(r) => { setDateRange(r || {}); }} />
               </div>
 
               {mode === "consultant" && (

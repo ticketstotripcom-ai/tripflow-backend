@@ -1,16 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
-import { Users, TrendingUp, CheckCircle, Flame, Target } from "lucide-react";
+import { Users, TrendingUp, CheckCircle, Flame, Target, Calendar } from "lucide-react";
 import { isWorkingCategoryStatus, isBookedStatus } from "@/lib/leadStatus";
 import { useMemo, useState } from "react";
 import LeadDetailDialog from "./LeadDetailDialog"; // ✅ Changed import name
 import HotLeadsDialog from "./HotLeadsDialog";
+import { parseFlexibleDate } from "@/lib/dateUtils";
 
 interface DashboardStatsProps {
   leads: SheetLead[];
 }
 
-type StatCategory = 'total' | 'working' | 'booked' | 'hot';
+type StatCategory = 'total' | 'working' | 'booked' | 'hot' | 'upcomingTrips';
 
 const DashboardStats = ({ leads }: DashboardStatsProps) => {
   const [selectedCategory, setSelectedCategory] = useState<StatCategory | null>(null);
@@ -26,6 +27,18 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
     leads.filter(lead => isBookedStatus(lead.status)),
     [leads]
   );
+
+  // 🗓️ UPCOMING TRIPS (booked from today onward by travel date)
+  const upcomingTrips = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return leads
+      .filter((l) => isBookedStatus(l.status))
+      .map((l) => ({ lead: l, td: parseFlexibleDate(l.travelDate) }))
+      .filter((x) => x.td && x.td.getTime() >= today.getTime())
+      .sort((a, b) => (a.td!.getTime() - b.td!.getTime()))
+      .map((x) => x.lead);
+  }, [leads]);
 
   // 🔥 HOT LEADS
   const hotLeads = useMemo(() =>
@@ -76,6 +89,15 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
       bgColor: "bg-green-50 dark:bg-green-950/20",
       category: 'booked' as StatCategory,
       leads: bookedLeads,
+    },
+    {
+      title: "Upcoming Trips",
+      value: upcomingTrips.length,
+      icon: Calendar,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50 dark:bg-indigo-950/20",
+      category: 'upcomingTrips' as StatCategory,
+      leads: upcomingTrips,
     },
   ];
 

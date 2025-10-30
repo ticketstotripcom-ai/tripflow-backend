@@ -151,3 +151,22 @@ All colors MUST be HSL.
     font-size: 16px;
   }
 }
+
+/* Date range picker visual fixes */
+@layer components {
+  /* Ensure both month panels are fully visible and themed */
+  .rdp, .months {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
+  .rdp-month, .months .month {
+    opacity: 1 !important;
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
+  /* Improve contrast for day cells */
+  .rdp-day[aria-selected="true"], .day[aria-selected="true"] {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+}
