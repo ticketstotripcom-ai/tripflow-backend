@@ -172,7 +172,7 @@ export class GoogleSheetsService {
       throw new Error('Service Account JSON required to add users');
     }
     const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
-    const range = `${worksheetName}!A:Z`;
+    const range = `${worksheetName}`;
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
 
@@ -199,6 +199,8 @@ export class GoogleSheetsService {
       row[idx] = value ?? '';
     });
 
+    console.log(`✅ Appending to sheet: ${worksheetName}`);
+    console.log('✅ Using Service Account for Sheets write operation');
     const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
     const res = await fetch(url, {
       method: 'POST',
@@ -364,7 +366,8 @@ export class GoogleSheetsService {
       return;
     }
     const worksheetName = this.config.worksheetNames[0] || 'MASTER DATA';
-    const range = `${worksheetName}!A:Z`;
+    const range = `${worksheetName}`;
+    console.log(`✅ Appending to sheet: ${worksheetName}`);
     console.log('✅ Using Service Account for Sheets write operation');
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;

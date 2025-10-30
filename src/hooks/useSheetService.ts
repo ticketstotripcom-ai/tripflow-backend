@@ -80,8 +80,9 @@ export async function useSheetService(): Promise<SheetService> {
     if (!serviceAccountJson) {
       throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
-    const range = `${normalizedSheet}!A:Z`;
+    const range = `${normalizedSheet}`;
     const token = await getAccessToken(serviceAccountJson);
+    console.log(`✅ Appending to sheet: ${normalizedSheet}`);
     console.log('✅ Using Service Account for Sheets write operation');
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
     const headers: Headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
