@@ -24,7 +24,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
     if (onDashboardClick) {
       onDashboardClick();
     } else {
-      navigate("/dashboard");
+      navigate("/dashboard?view=analytics");
     }
   };
 
