@@ -70,7 +70,11 @@ export default function Blackboard() {
       const now = new Date().toISOString();
       const id = uuid();
       await svc.appendRow('Blackboard', [id, content, session?.user.name || 'Admin', now]);
-      await notifyAll('New Blackboard Update', 'Admin posted a new announcement. Check your Dashboard.');
+      try {
+        await notifyAll('New Blackboard Update', 'Admin posted a new announcement. Check your Dashboard.');
+      } catch (err) {
+        console.warn('Blackboard notification failed (non-blocking):', err);
+      }
       setText('');
       await load();
       toast({ title: 'Posted', description: 'Your announcement has been shared with everyone.' });

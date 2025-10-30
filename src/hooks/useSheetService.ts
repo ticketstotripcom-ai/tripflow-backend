@@ -80,7 +80,15 @@ export async function useSheetService(): Promise<SheetService> {
     if (!sheetName) {
       throw new Error('Missing sheet name for append operation.');
     }
-    const normalizedSheet = normalizeSheetName(sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName));
+    const normalizedSheet = normalizeSheetName(
+      sheetName === 'users'
+        ? 'Users'
+        : sheetName === 'blackboard'
+          ? 'Blackboard'
+          : sheetName === 'notifications'
+            ? 'Notifications'
+            : sheetName
+    );
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
       try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
@@ -98,7 +106,15 @@ export async function useSheetService(): Promise<SheetService> {
 
   const getRows = async (sheetName: string, _range?: string) => {
     if (!sheetName) throw new Error('Missing sheet name for read operation.');
-    const normalizedSheet = normalizeSheetName(sheetName === 'users' ? 'Users' : (sheetName === 'blackboard' ? 'Blackboard' : sheetName));
+    const normalizedSheet = normalizeSheetName(
+      sheetName === 'users'
+        ? 'Users'
+        : sheetName === 'blackboard'
+          ? 'Blackboard'
+          : sheetName === 'notifications'
+            ? 'Notifications'
+            : sheetName
+    );
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
     const headers = await authHeaders();
     const res = await fetch(url, { headers });
