@@ -1,7 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
 import { useMemo } from "react";
 
@@ -81,7 +80,7 @@ const LeadFilters = ({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-card rounded-lg border shadow-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-card rounded-lg border shadow-sm">
       <div className="space-y-2">
         <Label className="text-xs font-medium">Status</Label>
         <Select value={statusFilter} onValueChange={onStatusChange}>
@@ -128,24 +127,7 @@ const LeadFilters = ({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">From</Label>
-        <Input
-          type="date"
-          value={dateFromFilter}
-          onChange={(e) => onDateRangeChange?.(e.target.value, dateToFilter)}
-          className="h-9"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">To</Label>
-        <Input
-          type="date"
-          value={dateToFilter}
-          onChange={(e) => onDateRangeChange?.(dateFromFilter, e.target.value)}
-          className="h-9"
-        />
-      </div>
+      {/* From/To inputs removed in favor of a unified date range picker */}
 
       {showConsultantFilter && onConsultantChange && (
         <div className="space-y-2">
