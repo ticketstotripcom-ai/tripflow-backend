@@ -63,6 +63,27 @@ const Settings = () => {
     loadLocalUsers();
   }, [navigate]);
 
+  // Persist Service Account JSON to localStorage for resilience on preview deployments
+  useEffect(() => {
+    try {
+      if (googleServiceAccountJson) {
+        localStorage.setItem('serviceAccountJson', googleServiceAccountJson);
+      }
+    } catch {}
+  }, [googleServiceAccountJson]);
+
+  // Bootstrap Service Account JSON from localStorage if secure storage is empty
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('serviceAccountJson');
+      if (stored && !googleServiceAccountJson) {
+        setGoogleServiceAccountJson(stored);
+      }
+    } catch {}
+    // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadCredentials = async () => {
     const credentials = await secureStorage.getCredentials();
     if (credentials) {

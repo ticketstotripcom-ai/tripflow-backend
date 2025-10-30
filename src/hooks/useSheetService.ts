@@ -56,7 +56,11 @@ export async function useSheetService(): Promise<SheetService> {
 
   const sheetId = credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '';
   const apiKey = credentials.googleApiKey;
-  const serviceAccountJson = credentials.googleServiceAccountJson;
+  let serviceAccountJson = credentials.googleServiceAccountJson;
+  // Fallback to localStorage for service account JSON (preview resilience)
+  if (!serviceAccountJson) {
+    try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+  }
 
   const authHeaders = async (): Promise<Headers> => {
     const headers: Headers = { 'Content-Type': 'application/json' };
@@ -68,9 +72,13 @@ export async function useSheetService(): Promise<SheetService> {
   };
 
   const appendRow = async (sheetName: string, row: any[]) => {
+    if (!serviceAccountJson) {
+      throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+    }
     const range = `${sheetName}!A:Z`;
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED${!serviceAccountJson && apiKey ? `&key=${apiKey}` : ''}`;
-    const headers = await authHeaders();
+    const token = await getAccessToken(serviceAccountJson);
+    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    const headers: Headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ values: [row] }) });
     if (!res.ok) throw new Error(await res.text());
   };

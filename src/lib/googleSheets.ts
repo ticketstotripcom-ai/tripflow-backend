@@ -133,7 +133,8 @@ export class GoogleSheetsService {
   /** Fetch users */
   async fetchUsers(): Promise<SheetUser[]> {
     const worksheetName = this.config.worksheetNames[1] || 'BACKEND SHEET';
-    const range = `${worksheetName}!A2:Z1000`;
+    // Read full header + data and then drop header row explicitly
+    const range = `${worksheetName}!A:N`;
 
     let url: string;
     let headers: Record<string, string> = {};
@@ -151,18 +152,16 @@ export class GoogleSheetsService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
     const data = await response.json();
-    const rows = data.values || [];
-    const cm = this.config.columnMappings;
+    const rows: any[][] = data.values || [];
 
-    return rows
+    // Map using fixed columns per spec: C,D,E,M,N (0-based: 2,3,4,12,13)
+    return rows.slice(1)
       .map((row: any[]) => ({
-        name: String(row[this.columnToIndex(cm.name || 'C')] || '').trim(),
-        email: String(row[this.columnToIndex(cm.email || 'D')] || '').trim(),
-        phone: String(row[this.columnToIndex(cm.phone || 'E')] || '').trim(),
-        role: String(row[this.columnToIndex(cm.role || 'M')] || 'consultant')
-          .toLowerCase()
-          .trim() as 'admin' | 'consultant',
-        password: String(row[this.columnToIndex(cm.password || 'N')] || '').trim(),
+        name: String(row[2] ?? '').trim(),
+        email: String(row[3] ?? '').trim(),
+        phone: String(row[4] ?? '').trim(),
+        role: String(row[12] ?? 'consultant').toLowerCase().trim() as 'admin' | 'consultant',
+        password: String(row[13] ?? '').trim(),
       }))
       .filter((u) => u.email && u.password);
   }

@@ -72,9 +72,18 @@ const AddLeadDialog = ({ open, onClose, onSuccess, onImmediateAdd }: AddLeadDial
         throw new Error('Google Sheets not configured. Please setup in Settings.');
       }
 
+      // Explicit guard for write operations requiring Service Account JSON
+      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
+      if (!effectiveServiceAccountJson) {
+        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      }
+      if (!effectiveServiceAccountJson) {
+        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+      }
+
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        serviceAccountJson: effectiveServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings

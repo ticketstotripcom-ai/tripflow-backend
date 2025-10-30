@@ -68,10 +68,14 @@ class AuthService {
         return { session: null, error: new Error('Google Sheets credentials not configured. Please setup in Admin Settings.') };
       }
 
+      // Fallback to locally persisted service account JSON if secure storage is empty (e.g., Vercel preview)
+      let localServiceAccountJson: string | undefined;
+      try { localServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey || '',
-        // Pass service account too so auth works without an API key
-        serviceAccountJson: credentials.googleServiceAccountJson,
+        // Prefer secure storage, fallback to localStorage
+        serviceAccountJson: credentials.googleServiceAccountJson || localServiceAccountJson,
         sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
         worksheetNames: credentials.worksheetNames,
         columnMappings: credentials.columnMappings
@@ -91,16 +95,15 @@ class AuthService {
       };
 
       const users = await attemptFetch(2);
-      const emailMatch = users.find(u => (u.email || '').trim().toLowerCase() === email);
-      if (!emailMatch) {
+      const matched = users.find((u) =>
+        String(u.email || '').trim().toLowerCase() === email &&
+        String(u.password || '').trim() === password
+      );
+      if (!matched) {
         console.error('Login failed: user not found in backend sheet', { email });
         return { session: null, error: new Error('user not found in backend sheet') };
       }
-      if ((emailMatch.password || '').trim() !== password) {
-        console.error('Login failed: password mismatch', { email });
-        return { session: null, error: new Error('password mismatch') };
-      }
-      const user = emailMatch;
+      const user = matched;
 
       const authUser: AuthUser = {
         id: btoa(user.email),
