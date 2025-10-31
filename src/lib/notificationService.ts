@@ -12,13 +12,65 @@ export interface Reminder {
 }
 
 class NotificationService {
-  private isInitialized = false;
+  private pushRegistered = false;
+  private listenersAttached = false;
+  private localPermissionsRequested = false;
 
   async initialize(): Promise<void> {
-    if (!Capacitor.isNativePlatform() || this.isInitialized) return;
+    if (!Capacitor.isNativePlatform()) return;
 
     try {
-      // Request permissions
+      await this.ensureLocalNotificationPermissions();
+    } catch (error) {
+      console.error('Failed to initialise local notifications:', error);
+    }
+  }
+
+  private attachPushListeners() {
+    if (this.listenersAttached) return;
+
+    PushNotifications.addListener('registration', (token) => {
+      console.log('Push registration success, token:', token.value);
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+      console.error('Error on registration:', JSON.stringify(error));
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('Push notification received:', notification);
+    });
+
+    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('Push notification action performed:', notification);
+    });
+
+    this.listenersAttached = true;
+  }
+
+  private async ensureLocalNotificationPermissions(): Promise<void> {
+    if (this.localPermissionsRequested) return;
+    if (!Capacitor.isPluginAvailable('LocalNotifications')) return;
+
+    try {
+      const status = await LocalNotifications.checkPermissions();
+      if (status.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
+      this.localPermissionsRequested = true;
+    } catch (error) {
+      console.warn('Local notifications permission request failed:', error);
+    }
+  }
+
+  async enableNotifications(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    if (!Capacitor.isPluginAvailable('PushNotifications')) {
+      console.info('PushNotifications plugin is not available on this platform');
+      return;
+    }
+
+    try {
       let permStatus = await PushNotifications.checkPermissions();
 
       if (permStatus.receive === 'prompt') {
@@ -30,31 +82,35 @@ class NotificationService {
         return;
       }
 
-      await PushNotifications.register();
+      this.attachPushListeners();
 
-      // Listen for notifications
-      PushNotifications.addListener('registration', (token) => {
-        console.log('Push registration success, token: ' + token.value);
-      });
+      if (!this.pushRegistered) {
+        await PushNotifications.register();
+        this.pushRegistered = true;
+      }
 
-      PushNotifications.addListener('registrationError', (error) => {
-        console.error('Error on registration: ' + JSON.stringify(error));
-      });
-
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        console.log('Push notification received: ', notification);
-      });
-
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('Push notification action performed', notification);
-      });
-
-      // Local notifications permission
-      await LocalNotifications.requestPermissions();
-
-      this.isInitialized = true;
+      await this.ensureLocalNotificationPermissions();
     } catch (error) {
-      console.error('Failed to initialize notifications:', error);
+      console.error('Failed to enable push notifications:', error);
+    }
+  }
+
+  async enableCallLog(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const callLogPlugin = (Capacitor as unknown as { Plugins?: Record<string, any> }).Plugins?.CallLog;
+    if (!callLogPlugin) {
+      console.info('CallLog plugin not available; skipping call log permission request');
+      return;
+    }
+
+    try {
+      const status = (await callLogPlugin.checkPermissions?.()) ?? {};
+      if (status?.granted) return;
+
+      await callLogPlugin.requestPermissions?.();
+    } catch (error) {
+      console.warn('Failed to request call log permissions:', error);
     }
   }
 

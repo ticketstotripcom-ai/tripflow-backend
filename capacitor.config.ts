@@ -1,14 +1,19 @@
 import type { CapacitorConfig } from '@capacitor/core';
 
 const config: CapacitorConfig = {
-  appId: 'com.ticketstotrip.crm',
-  appName: 'TTT CRM',
+  appId: 'com.tripflow.app',
+  appName: 'TripFlow CRM',
   webDir: 'dist',
-  plugins: {
-    CallLog: {
-      permissions: ['READ_CALL_LOG']
-    }
-  }
+  bundledWebRuntime: false,
+  server: {
+    cleartext: true,
+  },
+  // Uncomment if you want to use CallLog plugin later
+  // plugins: {
+  //   CallLog: {
+  //     permissions: ['READ_CALL_LOG'],
+  //   },
+  // },
 };
 
 export default config;

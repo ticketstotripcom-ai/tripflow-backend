@@ -132,5 +132,81 @@ Since this project has no hardcoded secrets:
 - **No users synced?**: Verify BACKEND SHEET has data in columns C, D, E, M, N
 - **Sheet not accessible?**: Ensure Service Account email has Editor access to the sheet
 
+## 📱 Android Build Checklist
+1. From the project root run `npm run build` to populate the `dist` folder, then run `npx cap sync android` so Capacitor copies the latest web assets and config.
+2. Verify `capacitor.config.ts` matches the production bundle:
+
+```11:18:capacitor.config.ts
+const config: CapacitorConfig = {
+  appId: 'com.tripflow.app',
+  appName: 'TripFlow CRM',
+  webDir: 'dist',
+  bundledWebRuntime: false,
+  server: {
+    cleartext: true,
+  },
+};
+```
+
+3. Update `android/app/src/main/AndroidManifest.xml` to declare the required permissions and provider:
+
+```1:41:android/app/src/main/AndroidManifest.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.tripflow.app.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
+```
+
+4. Create `android/app/src/main/res/xml/file_paths.xml` (create the `xml` folder if it does not exist) so the `FileProvider` can resolve shared files:
+
+```1:6:android/app/src/main/res/xml/file_paths.xml
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="shared_files" path="." />
+    <cache-path name="cache" path="." />
+</paths>
+```
+
+5. Build the native project:
+   - `cd android`
+   - `./gradlew clean`
+   - `./gradlew assembleDebug`
+
+6. Install the generated APK on your device. On first launch Android 13+ will prompt for the notification permission—granting it immediately avoids hitting the splash/loading guard we add in the app bootstrap.
+
 ## 🎉 You're All Set!
 Your CRM is now fully configured and ready to use. All users from your BACKEND SHEET can login and manage leads from MASTER DATA.

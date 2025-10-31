@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import BottomNavigation from "@/components/BottomNavigation";
+import { Capacitor } from "@capacitor/core";
+import { SplashScreen } from "@capacitor/splash-screen";
 import { authService } from "@/lib/authService";
 import { notificationService } from "@/lib/notificationService";
 import { themeService } from "@/lib/themeService";
@@ -34,17 +36,57 @@ const App = () => {
       if (saved) console.log('✅ Loaded service account JSON from localStorage');
     } catch {}
 
-    (async () => {
-      // Initialize all services
-      await Promise.all([
-        authService.initialize(),
-        notificationService.initialize(),
-        themeService.initialize(),
-      ]);
-      setupOfflineSync();
-      setIsReady(true);
-    })();
+    const bootstrap = async () => {
+      const canControlSplash = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('SplashScreen');
+
+      if (canControlSplash) {
+        try {
+          await SplashScreen.show({ autoHide: false });
+        } catch (error) {
+          console.warn('Unable to show splash screen:', error);
+        }
+      }
+
+      try {
+        await Promise.all([
+          authService.initialize(),
+          themeService.initialize(),
+        ]);
+        await notificationService.initialize();
+        setupOfflineSync();
+      } catch (error) {
+        console.error('Initialization error:', error);
+      } finally {
+        setIsReady(true);
+        if (canControlSplash) {
+          try {
+            await SplashScreen.hide();
+          } catch (error) {
+            console.warn('Unable to hide splash screen:', error);
+          }
+        }
+      }
+    };
+
+    void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const initPlugins = async () => {
+      if (!authService.isLoggedIn()) return;
+
+      try {
+        await notificationService.enableNotifications();
+        await notificationService.enableCallLog();
+      } catch (error) {
+        console.error('Plugin initialization failed:', error);
+      }
+    };
+
+    void initPlugins();
+  }, [isReady]);
 
   // Clear filters when switching between Home ↔ Dashboard and default Working tab
   const RouteEffects = () => {
