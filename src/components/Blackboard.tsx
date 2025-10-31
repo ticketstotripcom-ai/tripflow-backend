@@ -71,7 +71,7 @@ export default function Blackboard() {
       const id = uuid();
       await svc.appendRow('Blackboard', [id, content, session?.user.name || 'Admin', now]);
       try {
-        await notifyAll('New Blackboard Update', 'Admin posted a new announcement. Check your Dashboard.');
+        await notifyAll('New Blackboard Update', 'Admin posted a new announcement. Check your Dashboard.', 'blackboard');
       } catch (err) {
         console.warn('Blackboard notification failed (non-blocking):', err);
       }

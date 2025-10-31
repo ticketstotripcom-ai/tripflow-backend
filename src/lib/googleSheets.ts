@@ -2,6 +2,7 @@
 // Google Sheets API integration
 import { parseFlexibleDate as parseFlexibleDateUtil, formatSheetDate } from './dateUtils';
 import { enqueue } from './offlineQueue';
+import { parseServiceAccountJson, ServiceAccountJson } from './serviceAccount';
 
 export interface GoogleSheetsConfig {
   apiKey?: string;
@@ -60,33 +61,11 @@ export function getAuthorizedClient(serviceAccountJson: any) {
   }
 }
 
-// Local sanitizer to avoid cross-module imports
-function sanitizeServiceAccountJsonLocal(raw: string) {
-  if (!raw) return null;
-  try {
-    let fixed = String(raw).trim();
-    if (fixed.startsWith('"') && fixed.endsWith('"')) {
-      fixed = JSON.parse(fixed);
-    }
-    const obj = JSON.parse(
-      fixed
-        .replace(/\\n/g, '\n')
-        .replace(/\r/g, '')
-    );
-    if (obj && typeof obj === 'object' && obj.private_key) {
-      obj.private_key = String(obj.private_key).replace(/\\n/g, '\n').replace(/\r/g, '');
-    }
-    return obj;
-  } catch (e) {
-    return null;
-  }
-}
-
 export class GoogleSheetsService {
   private config: GoogleSheetsConfig;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
-  private parsedServiceAccount: any | null = null;
+  private parsedServiceAccount: ServiceAccountJson = null;
   
   private leadsCache: { data: SheetLead[]; timestamp: number } | null = null;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -96,7 +75,7 @@ export class GoogleSheetsService {
   }
 
   /** Ensure and return parsed Service Account object, with localStorage fallback */
-  private getParsedServiceAccount(): any | null {
+  private getParsedServiceAccount(): ServiceAccountJson {
     let sa = this.config.serviceAccountJson;
 
     // If missing, try localStorage fallback to reduce chances of missing credentials in previews
@@ -112,7 +91,7 @@ export class GoogleSheetsService {
     if (!sa) return null;
 
     if (typeof sa === 'string') {
-      const parsed = sanitizeServiceAccountJsonLocal(sa);
+      const parsed = parseServiceAccountJson(sa);
       if (!parsed) return null;
       this.config.serviceAccountJson = parsed;
       this.parsedServiceAccount = parsed;

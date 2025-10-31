@@ -56,9 +56,19 @@ export const notifyAll = async (title: string, message: string, type: AppNotific
       }
     }
 
-    if (emails.length === 0) return; // Nothing to do
+    const uniqueEmails = Array.from(
+      emails.reduce((acc, raw) => {
+        const trimmed = String(raw || '').trim();
+        if (!trimmed) return acc;
+        const key = trimmed.toLowerCase();
+        if (!acc.has(key)) acc.set(key, trimmed);
+        return acc;
+      }, new Map<string, string>()).values()
+    );
 
-    for (const email of emails) {
+    if (uniqueEmails.length === 0) return; // Nothing to do
+
+    for (const email of uniqueEmails) {
       await createNotification(sheetService, {
         id: uuid(), title, message, type, createdAt: new Date().toISOString(),
         read: false, userEmail: email
@@ -107,13 +117,21 @@ export const notifyAdmin = async (title: string, message: string) => {
       }
     }
 
-    for (const u of users) {
-      if (u.role.includes('admin') && u.email) {
-        await createNotification(sheetService, {
-          id: uuid(), title, message, type: 'admin', createdAt: new Date().toISOString(),
-          read: false, userEmail: u.email
-        });
-      }
+    const uniqueAdmins = Array.from(
+      users.reduce((acc, u) => {
+        if (!u.email) return acc;
+        if (!u.role.includes('admin')) return acc;
+        const key = u.email.toLowerCase();
+        if (!acc.has(key)) acc.set(key, u.email);
+        return acc;
+      }, new Map<string, string>()).values()
+    );
+
+    for (const email of uniqueAdmins) {
+      await createNotification(sheetService, {
+        id: uuid(), title, message, type: 'admin', createdAt: new Date().toISOString(),
+        read: false, userEmail: email
+      });
     }
   } catch (e) {
     console.warn('notifyAdmin failed (non-blocking):', e);

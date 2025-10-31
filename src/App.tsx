@@ -117,8 +117,7 @@ const App = () => {
 
           // Lead assigned
           if (prev && (!prev.consultant || prev.consultant.includes('unassigned')) && curr.consultant && !curr.consultant.includes('unassigned')) {
-            const email = nameToEmail[curr.consultant];
-            if (email) await notifyUser(email, 'Lead assigned', `${l.travellerName} has been assigned to you`, 'leadAssigned');
+            await notifyAll('Lead assigned', `${l.travellerName} has been assigned to ${curr.consultant}.`, 'leadAssigned');
           }
 
           // Trip reminders (2 days, 1 day, today) to consultant and admins
@@ -133,7 +132,9 @@ const App = () => {
           }
 
           // Lead booked/closed → notify all
-          if (prev && !prev.status.includes('booked') && curr.status.includes('booked')) {
+          const previouslyBooked = prev ? prev.status.includes('booked') || prev.status.includes('nooked') : false;
+          const currentlyBooked = curr.status.includes('booked') || curr.status.includes('nooked');
+          if (prev && !previouslyBooked && currentlyBooked) {
             await notifyAll('Lead booked', `${l.travellerName} booked with us`, 'leadClosed');
           }
 

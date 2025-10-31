@@ -13,6 +13,7 @@ import { GoogleSheetsService } from "@/lib/googleSheets";
 import { getLocalUsers, addLocalUser, deleteLocalUser, updateLocalUserRole, updateLocalUser, LocalUser } from "@/config/login";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSettings, sanitizeServiceAccountJson } from "@/lib/SettingsContext";
+import { stringifyServiceAccountJson } from "@/lib/serviceAccount";
 
 const Settings = () => {
   const [googleApiKey, setGoogleApiKey] = useState("");
@@ -87,7 +88,12 @@ const Settings = () => {
         const parsed = sanitizeServiceAccountJson(json);
         if (parsed) {
           setServiceAccountJson(parsed);
-          try { localStorage.setItem('serviceAccountJson', JSON.stringify(parsed)); } catch {}
+          try {
+            const serialized = stringifyServiceAccountJson(parsed);
+            if (serialized) {
+              localStorage.setItem('serviceAccountJson', serialized);
+            }
+          } catch {}
         } else {
           console.warn('⚠️ Failed to parse service account JSON from secure storage');
         }
@@ -150,7 +156,12 @@ const Settings = () => {
         return;
       }
       // Persist to localStorage for fallback and set in context
-      try { localStorage.setItem('serviceAccountJson', JSON.stringify(sanitizedServiceAccount)); } catch {}
+      try {
+        const serialized = stringifyServiceAccountJson(sanitizedServiceAccount);
+        if (serialized) {
+          localStorage.setItem('serviceAccountJson', serialized);
+        }
+      } catch {}
       setServiceAccountJson(sanitizedServiceAccount);
     }
 
@@ -312,7 +323,12 @@ const Settings = () => {
                   const valid = !!parsed || val.trim() === '';
                   setIsJsonValid(valid);
                   if (parsed) {
-                    try { localStorage.setItem('serviceAccountJson', JSON.stringify(parsed)); } catch {}
+                    try {
+                      const serialized = stringifyServiceAccountJson(parsed);
+                      if (serialized) {
+                        localStorage.setItem('serviceAccountJson', serialized);
+                      }
+                    } catch {}
                     setServiceAccountJson(parsed);
                   }
                 }}

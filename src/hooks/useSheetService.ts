@@ -9,6 +9,18 @@ function normalizeSheetName(name: string): string {
   return name.includes('!') ? name.split('!')[0] : name;
 }
 
+function columnIndexToLetter(index: number): string {
+  if (index < 0) throw new Error('Column index must be >= 0');
+  let n = index + 1;
+  let result = '';
+  while (n > 0) {
+    const remainder = (n - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    n = Math.floor((n - 1) / 26);
+  }
+  return result;
+}
+
 async function getAccessToken(serviceAccountJson?: string): Promise<string> {
   if (!serviceAccountJson) throw new Error('Service Account JSON required');
   const serviceAccount = JSON.parse(serviceAccountJson);
@@ -53,6 +65,7 @@ async function getAccessToken(serviceAccountJson?: string): Promise<string> {
 export interface SheetService {
   appendRow: (sheetName: string, row: any[]) => Promise<void>;
   getRows: (sheetName: string, range?: string) => Promise<any[][]>;
+  batchUpdateCells: (sheetName: string, cells: Array<{ row: number; column: number; value: any }>) => Promise<void>;
 }
 
 export async function useSheetService(): Promise<SheetService> {
@@ -81,13 +94,13 @@ export async function useSheetService(): Promise<SheetService> {
       throw new Error('Missing sheet name for append operation.');
     }
     const normalizedSheet = normalizeSheetName(
-      sheetName === 'users'
-        ? 'Users'
-        : sheetName === 'blackboard'
-          ? 'Blackboard'
-          : sheetName === 'notifications'
-            ? 'Notifications'
-            : sheetName
+      (() => {
+        const key = sheetName.toLowerCase();
+        if (key === 'users') return 'Users';
+        if (key === 'blackboard') return 'Blackboard';
+        if (key === 'notifications' || key === 'notification') return 'Notification';
+        return sheetName;
+      })()
     );
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
@@ -107,13 +120,13 @@ export async function useSheetService(): Promise<SheetService> {
   const getRows = async (sheetName: string, _range?: string) => {
     if (!sheetName) throw new Error('Missing sheet name for read operation.');
     const normalizedSheet = normalizeSheetName(
-      sheetName === 'users'
-        ? 'Users'
-        : sheetName === 'blackboard'
-          ? 'Blackboard'
-          : sheetName === 'notifications'
-            ? 'Notifications'
-            : sheetName
+      (() => {
+        const key = sheetName.toLowerCase();
+        if (key === 'users') return 'Users';
+        if (key === 'blackboard') return 'Blackboard';
+        if (key === 'notifications' || key === 'notification') return 'Notification';
+        return sheetName;
+      })()
     );
     const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
     const headers = await authHeaders();
@@ -125,5 +138,44 @@ export async function useSheetService(): Promise<SheetService> {
     return values;
   };
 
-  return { appendRow, getRows };
+  const batchUpdateCells = async (sheetName: string, cells: Array<{ row: number; column: number; value: any }>) => {
+    if (!sheetName) throw new Error('Missing sheet name for update operation.');
+    if (!cells || cells.length === 0) return;
+    const normalizedSheet = normalizeSheetName(
+      (() => {
+        const key = sheetName.toLowerCase();
+        if (key === 'users') return 'Users';
+        if (key === 'blackboard') return 'Blackboard';
+        if (key === 'notifications' || key === 'notification') return 'Notification';
+        return sheetName;
+      })()
+    );
+    if (!serviceAccountJson) {
+      console.error('⚠️ Service Account JSON missing, using localStorage fallback');
+      try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+    }
+
+    const token = await getAccessToken(serviceAccountJson);
+
+    const data = cells.map(({ row, column, value }) => {
+      if (!row || row < 1) throw new Error('Row number must be >= 1 for batch update');
+      const columnLetter = columnIndexToLetter(column);
+      return {
+        range: `${normalizedSheet}!${columnLetter}${row}`,
+        values: [[value]],
+      };
+    });
+
+    console.log(`✅ Batch updating ${cells.length} cells in sheet: ${normalizedSheet}`);
+    const url = `${SHEETS_API_BASE}/${sheetId}/values:batchUpdate`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+  };
+
+  return { appendRow, getRows, batchUpdateCells };
 }

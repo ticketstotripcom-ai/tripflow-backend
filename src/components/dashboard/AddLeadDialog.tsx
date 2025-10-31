@@ -10,6 +10,7 @@ import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { secureStorage } from "@/lib/secureStorage";
 import AddLeadErrorDialog from "./AddLeadErrorDialog";
+import { notifyAll } from "@/utils/notifyTriggers";
 
 interface AddLeadDialogProps {
   open: boolean;
@@ -111,6 +112,11 @@ const AddLeadDialog = ({ open, onClose, onSuccess, onImmediateAdd }: AddLeadDial
 
       console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.appendLead(newLead as any);
+      await notifyAll(
+        'New lead created',
+        `${formData.travellerName || 'A new lead'} was added by ${session?.user.name || 'Unknown user'}.`,
+        'newLead'
+      );
 
       toast({
         title: "Lead added successfully",
