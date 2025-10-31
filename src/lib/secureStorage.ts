@@ -57,9 +57,22 @@ export const secureStorage = {
       // First check if local secrets are configured
       if (areSecretsConfigured()) {
         const sheetIdMatch = localSecrets.spreadsheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        let bundledServiceAccount: string | undefined;
+        if (typeof localSecrets.serviceAccountJson === 'string') {
+          bundledServiceAccount = localSecrets.serviceAccountJson.includes('YOUR_')
+            ? undefined
+            : localSecrets.serviceAccountJson;
+        } else if (localSecrets.serviceAccountJson) {
+          try {
+            bundledServiceAccount = JSON.stringify(localSecrets.serviceAccountJson);
+          } catch {
+            bundledServiceAccount = undefined;
+          }
+        }
+
         return {
           googleApiKey: localSecrets.googleApiKey !== "YOUR_GOOGLE_API_KEY_HERE" ? localSecrets.googleApiKey : undefined,
-          googleServiceAccountJson: localSecrets.serviceAccountJson.includes("YOUR_") ? undefined : localSecrets.serviceAccountJson,
+          googleServiceAccountJson: bundledServiceAccount,
           googleSheetUrl: localSecrets.spreadsheetUrl,
           worksheetNames: localSecrets.worksheetNames,
           columnMappings: localSecrets.columnMappings,

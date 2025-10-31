@@ -85,6 +85,15 @@ Row 3: | | | Jane Smith | jane@example.com | +9876543210 | | | | | | | | consult
 3. Click **Save Settings**
 4. Click **Sync Now** button to sync all users from BACKEND SHEET
 
+### Optional: Preload Credentials for Mobile Builds
+If you need consultant devices to work immediately after installation (without an admin first logging in to paste the service account JSON), you can bundle the credentials with the build:
+
+1. Place your Google service account file at `src/config/serviceAccount.json` (the file is git-ignored by default).
+2. Verify the JSON is valid and still grants access to the target spreadsheet.
+3. Re-run your mobile build pipeline (`npm run build`, `npx cap sync android`, etc.).
+
+At runtime the app will automatically load this bundled JSON (or, alternatively, the values provided through `VITE_SERVICE_ACCOUNT_JSON` / `VITE_SERVICE_ACCOUNT_JSON_BASE64`) and unlock write access for consultant accounts without requiring an admin to configure settings first.
+
 ### Step 5: Login with Your Own Users
 After syncing:
 1. Logout from default admin account
