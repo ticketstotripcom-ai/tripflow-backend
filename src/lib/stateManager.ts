@@ -1,6 +1,7 @@
 // State persistence and caching for CRM
 import { SheetLead } from './googleSheets';
 import { secureStorage } from './secureStorage';
+import { persistCacheSnapshot, readCacheSnapshot } from './deviceStorage';
 
 interface AppState {
   // Dashboard state
@@ -12,6 +13,7 @@ interface AppState {
   dateFromFilter?: string;
   dateToFilter?: string;
   consultantFilter: string;
+  swipeEnabled: boolean;
   
   // Cached data
   cachedLeads: SheetLead[];
@@ -35,6 +37,7 @@ class StateManager {
     dateFromFilter: '',
     dateToFilter: '',
     consultantFilter: 'All Consultants',
+    swipeEnabled: true,
     cachedLeads: [],
     lastFetchTime: 0,
     scrollPositions: {}
@@ -70,9 +73,15 @@ class StateManager {
 
   private async hydratePersistentCache(): Promise<void> {
     try {
+      let parsed: { leads: SheetLead[]; lastFetchTime: number } | null = null;
       const stored = await secureStorage.get(PERSISTENT_LEADS_KEY);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as { leads: SheetLead[]; lastFetchTime: number };
+      if (stored) {
+        parsed = JSON.parse(stored) as { leads: SheetLead[]; lastFetchTime: number };
+      }
+      if (!parsed) {
+        parsed = await readCacheSnapshot<{ leads: SheetLead[]; lastFetchTime: number }>('leads');
+      }
+      if (!parsed) return;
       // Only hydrate if our in-memory cache is empty or older
       if (
         (!this.state.cachedLeads || this.state.cachedLeads.length === 0) ||
@@ -136,6 +145,15 @@ class StateManager {
     this.saveState();
   }
 
+  getSwipeEnabled(): boolean {
+    return this.state.swipeEnabled !== false;
+  }
+
+  setSwipeEnabled(enabled: boolean): void {
+    this.state.swipeEnabled = enabled;
+    this.saveState();
+  }
+
   // Cache management
   getCachedLeads(): { leads: SheetLead[]; isValid: boolean } {
     const now = Date.now();
@@ -158,6 +176,7 @@ class StateManager {
     try {
       localStorage.setItem('crm_leads_cache_v1', JSON.stringify({ leads, lastFetchTime: this.state.lastFetchTime }));
     } catch {}
+    void persistCacheSnapshot('leads', { leads, lastFetchTime: this.state.lastFetchTime });
   }
 
   invalidateCache(): void {
@@ -188,6 +207,7 @@ class StateManager {
       dateFromFilter: '',
       dateToFilter: '',
       consultantFilter: 'All Consultants',
+      swipeEnabled: true,
       cachedLeads: [],
       lastFetchTime: 0,
       scrollPositions: {}

@@ -22,9 +22,13 @@ import DailyReportDialog from "./DailyReportDialog";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
 import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isNewCategoryStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
-import { compareDescByDate } from "@/lib/dateUtils";
+import { compareDescByDate, parseFlexibleDate } from "@/lib/dateUtils";
 
-const ConsultantDashboard = () => {
+interface ConsultantDashboardProps {
+  swipeEnabled: boolean;
+}
+
+const ConsultantDashboard = ({ swipeEnabled }: ConsultantDashboardProps) => {
   const location = useLocation();
   const viewParam = new URLSearchParams(location.search).get('view');
   const isAnalyticsOnly = viewParam === 'analytics';
@@ -201,21 +205,42 @@ const ConsultantDashboard = () => {
       const matchesPriority =
         priorityFilter === "All Priorities" ||
         (lead.priority || '').toLowerCase() === priorityFilter.toLowerCase();
-      // Date filters: exact date or range
-      const leadDate = lead.dateAndTime;
+      // Date filters: exact date or range using flexible parsing
+      const leadDateValue = parseFlexibleDate(lead.dateAndTime) || parseFlexibleDate(lead.travelDate);
       let matchesDate = true;
       if (dateFilter) {
-        matchesDate = leadDate === dateFilter;
-      }
-      if ((dateFromFilter || dateToFilter) && leadDate) {
-        const ld = new Date(leadDate + 'T00:00:00');
-        if (dateFromFilter) {
-          const from = new Date(dateFromFilter + 'T00:00:00');
-          if (ld < from) matchesDate = false;
+        const filterDate = parseFlexibleDate(dateFilter);
+        if (!filterDate || !leadDateValue) {
+          matchesDate = false;
+        } else {
+          const leadDay = new Date(leadDateValue);
+          const filterDay = new Date(filterDate);
+          leadDay.setHours(0, 0, 0, 0);
+          filterDay.setHours(0, 0, 0, 0);
+          matchesDate = leadDay.getTime() === filterDay.getTime();
         }
-        if (dateToFilter) {
-          const to = new Date(dateToFilter + 'T23:59:59');
-          if (ld > to) matchesDate = false;
+      }
+      if (matchesDate && (dateFromFilter || dateToFilter)) {
+        if (!leadDateValue) {
+          matchesDate = false;
+        } else {
+          const leadDay = new Date(leadDateValue);
+          if (dateFromFilter) {
+            const fromDate = parseFlexibleDate(dateFromFilter);
+            if (fromDate) {
+              const from = new Date(fromDate);
+              from.setHours(0, 0, 0, 0);
+              if (leadDay < from) matchesDate = false;
+            }
+          }
+          if (matchesDate && dateToFilter) {
+            const toDate = parseFlexibleDate(dateToFilter);
+            if (toDate) {
+              const to = new Date(toDate);
+              to.setHours(23, 59, 59, 999);
+              if (leadDay > to) matchesDate = false;
+            }
+          }
         }
       }
 
@@ -279,12 +304,12 @@ const ConsultantDashboard = () => {
       // Optimistic UI update
       setLeads((prev) => prev.map((l) =>
         l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
-          ? { ...l, status: 'Cancelled' }
+          ? { ...l, status: 'Cancellations' }
           : l
       ));
 
       console.log('✅ Using Service Account for Sheets write operation');
-      await sheetsService.updateLead(lead, { status: 'Cancelled' });
+      await sheetsService.updateLead(lead, { status: 'Cancellations' });
       toast({
         title: "Lead Cancelled",
         description: `${lead.travellerName} moved to cancellations.`,
@@ -338,6 +363,7 @@ const ConsultantDashboard = () => {
               onClick={() => setSelectedLead(lead)}
               onSwipeLeft={handleSwipeLeft}
               onSwipeRight={handleSwipeRight}
+              swipeEnabled={swipeEnabled}
               onPriorityUpdated={(l, p) => {
                 setLeads(prev => prev.map(x => (
                   x.tripId === l.tripId && x.travellerName === l.travellerName && x.dateAndTime === l.dateAndTime

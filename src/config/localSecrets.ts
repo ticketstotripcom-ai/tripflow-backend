@@ -152,8 +152,16 @@ function hasValidServiceAccount(value: unknown): boolean {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return false;
-    if (trimmed.includes('"private_key"') && trimmed.includes('-----BEGIN')) return true;
-    return !trimmed.includes('YOUR_');
+    if (trimmed.includes('YOUR_')) return false;
+    if (trimmed.includes('"private_key"') && trimmed.includes('-----BEGIN')) {
+      // Guard against placeholder private key text
+      const privateKeyMatch = trimmed.match(/"private_key"\s*:\s*"([^"]+)"/);
+      if (privateKeyMatch && privateKeyMatch[1].includes('YOUR_PRIVATE_KEY')) {
+        return false;
+      }
+      return true;
+    }
+    return false;
   }
   if (typeof value === 'object') return true;
   return false;

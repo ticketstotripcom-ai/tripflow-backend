@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { UserCheck } from "lucide-react";
+import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 interface AssignLeadDialogProps {
   open: boolean;
@@ -31,6 +32,10 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
   const [selectedConsultant, setSelectedConsultant] = useState<string>(lead.consultant || "");
   const [assigning, setAssigning] = useState(false);
   const { toast } = useToast();
+
+  useGlobalPopupClose(() => {
+    if (open) onClose();
+  }, open);
 
   useEffect(() => {
     setSelectedConsultant(lead.consultant || "");

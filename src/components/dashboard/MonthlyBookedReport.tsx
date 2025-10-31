@@ -18,13 +18,18 @@ export default function MonthlyBookedReport({ leads }: MonthlyBookedReportProps)
   }).reverse();
 
   const booked = leads.filter((l) => (l.status || '').toLowerCase().includes('booked'));
-  const enriched = booked.map((l) => {
-    // Prefer booking date from notes; fallback to column AA if present on object; then creation date
-    const noteDate = extractAnyDateFromText(l.notes);
-    const aaDate = (l as any).timeStamp ? parseFlexibleDate((l as any).timeStamp) : null;
-    const baseDate = noteDate || aaDate || parseFlexibleDate(l.dateAndTime) || new Date(0);
-    return { ...l, bookingDate: baseDate } as SheetLead & { bookingDate: Date };
-  });
+  const enriched = booked
+    .map((l) => {
+      const noteDate = extractAnyDateFromText(l.notes);
+      const timestampDate = (l as any).timeStamp ? parseFlexibleDate((l as any).timeStamp) : null;
+      const createdDate = parseFlexibleDate(l.dateAndTime);
+      const travelDate = parseFlexibleDate(l.travelDate);
+      const baseDate = noteDate || timestampDate || createdDate || travelDate;
+      if (!baseDate) return null;
+      const bookingDate = new Date(baseDate);
+      return { ...l, bookingDate } as SheetLead & { bookingDate: Date };
+    })
+    .filter((entry): entry is SheetLead & { bookingDate: Date } => !!entry && !isNaN(entry.bookingDate.getTime()));
 
   const [activeKey, setActiveKey] = React.useState(months[months.length - 1].key);
 
@@ -32,7 +37,10 @@ export default function MonthlyBookedReport({ leads }: MonthlyBookedReportProps)
     const { date } = months.find((m) => m.key === activeKey) || months[months.length - 1];
     const month = date.getMonth();
     const year = date.getFullYear();
-    const inMonth = enriched.filter((l) => l.bookingDate.getMonth() === month && l.bookingDate.getFullYear() === year);
+    const inMonth = enriched.filter((l) => {
+      const bookingDay = new Date(l.bookingDate);
+      return bookingDay.getMonth() === month && bookingDay.getFullYear() === year;
+    });
     const byConsultant: Record<string, number> = {};
     inMonth.forEach((l) => {
       const c = (l.consultant || 'Unassigned').trim();

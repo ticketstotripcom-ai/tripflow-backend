@@ -1,4 +1,5 @@
 import { secureStorage } from '@/lib/secureStorage';
+import { readPersistedServiceAccountJson } from '@/lib/deviceStorage';
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -78,6 +79,9 @@ export async function useSheetService(): Promise<SheetService> {
   // Fallback to localStorage for service account JSON (preview resilience)
   if (!serviceAccountJson) {
     try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+    if (!serviceAccountJson) {
+      serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+    }
   }
 
   const authHeaders = async (): Promise<Headers> => {
@@ -105,6 +109,9 @@ export async function useSheetService(): Promise<SheetService> {
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
       try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      if (!serviceAccountJson) {
+        serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+      }
       if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
     const range = `${normalizedSheet}`;
@@ -153,6 +160,9 @@ export async function useSheetService(): Promise<SheetService> {
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
       try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      if (!serviceAccountJson) {
+        serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+      }
       if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
 

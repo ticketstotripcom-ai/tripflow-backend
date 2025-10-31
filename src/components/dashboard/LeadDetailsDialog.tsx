@@ -13,6 +13,7 @@ import { secureStorage } from "@/lib/secureStorage";
 import { Bell } from "lucide-react";
 import { formatDisplayDate } from "@/lib/dateUtils";
 import ReminderDialog from "./ReminderDialog";
+import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 interface LeadDetailsDialogProps {
   lead: SheetLead;
@@ -106,6 +107,12 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const [dateError, setDateError] = useState<string>("");
   const { toast } = useToast();
+
+  useGlobalPopupClose(() => {
+    if (open) {
+      onClose();
+    }
+  }, open);
 
   const handleDateChange = (rawVal: string) => {
     const normalized = dateToDDMMYYYY(parseAnyDate(rawVal) || rawVal);

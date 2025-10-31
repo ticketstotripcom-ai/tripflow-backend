@@ -130,7 +130,7 @@ export default function NotificationBell({ user }: { user: { email?: string } })
         </TooltipContent>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white shadow-xl rounded-xl p-3 z-50 border">
+        <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 shadow-xl rounded-xl p-3 z-[110] border border-slate-200 dark:border-slate-700">
           {notifications.length === 0 ? (
             <div className="text-xs text-muted-foreground">No new notifications</div>
           ) : (

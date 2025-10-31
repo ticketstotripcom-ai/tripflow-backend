@@ -11,6 +11,7 @@ import { authService } from "@/lib/authService";
 import { secureStorage } from "@/lib/secureStorage";
 import AddLeadErrorDialog from "./AddLeadErrorDialog";
 import { notifyAll } from "@/utils/notifyTriggers";
+import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 interface AddLeadDialogProps {
   open: boolean;
@@ -60,6 +61,12 @@ const AddLeadDialog = ({ open, onClose, onSuccess, onImmediateAdd }: AddLeadDial
   const [saving, setSaving] = useState(false);
   const [showProtectionError, setShowProtectionError] = useState(false);
   const { toast } = useToast();
+
+  useGlobalPopupClose(() => {
+    if (open) {
+      onClose();
+    }
+  }, open);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

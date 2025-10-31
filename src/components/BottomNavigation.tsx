@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, LayoutDashboard } from "lucide-react";
 import { stateManager } from "@/lib/stateManager";
+import { emitGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 interface BottomNavigationProps {
   onDashboardClick?: () => void;
@@ -12,11 +13,13 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   const location = useLocation();
 
   const handleBack = () => {
+    emitGlobalPopupClose();
     navigate(-1); // uniform history back (was window.history.back())
   };
 
   // Home: go to root ("/") just like top navigation
   const handleHome = () => {
+    emitGlobalPopupClose();
     // Always reset Home to Working tab and clear filters
     stateManager.setActiveTab('working');
     stateManager.setFilters({
@@ -32,6 +35,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
 
   // Dashboard - navigate directly to analytics view
   const handleDashboard = () => {
+    emitGlobalPopupClose();
     if (onDashboardClick) {
       onDashboardClick();
     } else {
@@ -50,8 +54,8 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t shadow-elegant z-50">
-      <div className="container mx-auto px-4 py-3">
+    <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t shadow-elegant z-[120]">
+      <div className="container mx-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0)+0.75rem)]">
         <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto justify-items-center">
           <Button
             variant="outline"

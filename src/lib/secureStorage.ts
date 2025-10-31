@@ -1,6 +1,13 @@
 // Secure credential storage for mobile and web
 import { Preferences } from '@capacitor/preferences';
 import { localSecrets, areSecretsConfigured } from '@/config/localSecrets';
+import {
+  clearPersistedServiceAccountJson,
+  persistAppMetadata,
+  persistServiceAccountJson,
+  readAppMetadata,
+  readPersistedServiceAccountJson,
+} from './deviceStorage';
 
 const ENCRYPTION_KEY_STORAGE = 'app_encryption_key';
 const CREDENTIALS_STORAGE = 'secure_credentials';
@@ -50,6 +57,17 @@ export const secureStorage = {
     const key = await getEncryptionKey();
     const encrypted = simpleEncrypt(JSON.stringify(credentials), key);
     await Preferences.set({ key: CREDENTIALS_STORAGE, value: encrypted });
+
+    if (credentials.googleServiceAccountJson) {
+      await persistServiceAccountJson(credentials.googleServiceAccountJson);
+    } else {
+      await clearPersistedServiceAccountJson();
+    }
+
+    await persistAppMetadata({
+      paymentLinks: credentials.paymentLinks,
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   async getCredentials(): Promise<SecureCredentials | null> {
@@ -70,6 +88,15 @@ export const secureStorage = {
           }
         }
 
+        if (bundledServiceAccount) {
+          await persistServiceAccountJson(bundledServiceAccount);
+        }
+
+        await persistAppMetadata({
+          paymentLinks: localSecrets.paymentLinks,
+          updatedAt: new Date().toISOString(),
+        });
+
         return {
           googleApiKey: localSecrets.googleApiKey !== "YOUR_GOOGLE_API_KEY_HERE" ? localSecrets.googleApiKey : undefined,
           googleServiceAccountJson: bundledServiceAccount,
@@ -86,7 +113,23 @@ export const secureStorage = {
       
       const key = await getEncryptionKey();
       const decrypted = simpleDecrypt(value, key);
-      return JSON.parse(decrypted);
+      const parsed = JSON.parse(decrypted) as SecureCredentials;
+
+      if (!parsed.googleServiceAccountJson) {
+        const persisted = await readPersistedServiceAccountJson();
+        if (persisted) {
+          parsed.googleServiceAccountJson = persisted;
+        }
+      }
+
+      if (!parsed.paymentLinks || parsed.paymentLinks.length === 0) {
+        const metadata = await readAppMetadata();
+        if (metadata?.paymentLinks?.length) {
+          parsed.paymentLinks = metadata.paymentLinks;
+        }
+      }
+
+      return parsed;
     } catch (error) {
       console.error('Failed to decrypt credentials:', error);
       return null;
@@ -95,6 +138,7 @@ export const secureStorage = {
 
   async clearCredentials(): Promise<void> {
     await Preferences.remove({ key: CREDENTIALS_STORAGE });
+    await clearPersistedServiceAccountJson();
   },
 
   async set(key: string, value: string): Promise<void> {

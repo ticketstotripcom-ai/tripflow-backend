@@ -23,6 +23,7 @@ import { useSheetService } from "@/hooks/useSheetService";
 import { notifyAdmin, notifyAll, notifyUser } from "@/utils/notifyTriggers";
 import { parseFlexibleDate } from "@/lib/dateUtils";
 import { SettingsProvider } from "@/lib/SettingsContext";
+import { ensureAppStorageStructure } from "@/lib/deviceStorage";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => {
       }
 
       try {
+        await ensureAppStorageStructure();
         await Promise.all([
           authService.initialize(),
           themeService.initialize(),

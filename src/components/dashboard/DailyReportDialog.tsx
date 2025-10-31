@@ -16,6 +16,7 @@ import { isBookedStatus, isCancelCategoryStatus, isNewCategoryStatus, normalizeS
 import { Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
 import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
 import { parseFlexibleDate, formatDisplayDate, extractAnyDateFromText } from "@/lib/dateUtils";
+import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 type Mode = "consultant" | "admin";
 
@@ -176,6 +177,12 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   const session = authService.getSession();
   const { toast } = useToast();
 
+  useGlobalPopupClose(() => {
+    if (open) {
+      onClose();
+    }
+  }, open);
+
   // Default to today's single-day range
   const [dateRange, setDateRange] = useState<DateRange>(() => {
     const today = new Date();
@@ -280,8 +287,8 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl bg-gradient-to-b from-white to-indigo-50">
-        <DialogHeader className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-lg p-3 sticky top-0 z-10 shadow">
+      <DialogContent className="max-w-4xl bg-gradient-to-b from-white to-indigo-50 dark:from-slate-950 dark:to-slate-900">
+        <DialogHeader className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-500 dark:via-purple-500 dark:to-pink-500 text-white rounded-lg p-3 sticky top-0 z-10 shadow">
           <DialogTitle className="flex items-center gap-2 text-white">
             {mode === "consultant" ? <Users className="h-5 w-5" /> : <Users className="h-5 w-5" />}
             {mode === "consultant" ? "Daily Report (My Activities)" : "Daily Report (Team Builder)"}
@@ -289,7 +296,7 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="md:col-span-1 bg-indigo-50/50 border-indigo-200">
+          <Card className="md:col-span-1 bg-indigo-50/50 dark:bg-slate-900 border-indigo-200 dark:border-indigo-500/40">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Configuration</CardTitle>
             </CardHeader>
@@ -367,7 +374,7 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
             </CardContent>
           </Card>
 
-          <Card className="md:col-span-2 bg-white border-indigo-100">
+          <Card className="md:col-span-2 bg-white dark:bg-slate-900 border-indigo-100 dark:border-slate-700">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Preview</CardTitle>
             </CardHeader>
@@ -428,7 +435,7 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
                   <TooltipProvider>
                     <div className="grid grid-cols-1 gap-2 text-xs">
                       {adminEntries.map((e, idx) => (
-                        <div key={e.name} className="flex flex-wrap items-center justify-between border rounded-md p-2 bg-white md:bg-gradient-to-r md:from-white md:to-indigo-50">
+                        <div key={e.name} className="flex flex-wrap items-center justify-between border rounded-md p-2 bg-white dark:bg-slate-900 md:bg-gradient-to-r md:from-white md:to-indigo-50 md:dark:from-slate-900 md:dark:to-indigo-900/40">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="font-medium">{idx + 1}.</span>
                             <span className="truncate max-w-[10rem] sm:max-w-[16rem]">{e.name}</span>

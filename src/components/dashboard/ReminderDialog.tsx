@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Bell } from "lucide-react";
+import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
 interface ReminderDialogProps {
   open: boolean;
@@ -20,6 +21,10 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
   const { toast } = useToast();
+
+  useGlobalPopupClose(() => {
+    if (open) onClose();
+  }, open);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

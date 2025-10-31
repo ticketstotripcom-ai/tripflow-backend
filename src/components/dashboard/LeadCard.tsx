@@ -20,6 +20,7 @@ interface LeadCardProps {
   onSwipeLeft?: (lead: SheetLead) => void;
   onSwipeRight?: (lead: SheetLead) => void;
   onPriorityUpdated?: (lead: SheetLead, newPriority: string) => void;
+  swipeEnabled?: boolean;
 }
 
 // Date formatting is unified via dateUtils
@@ -75,7 +76,7 @@ const getStatusColor = (status: string): string => {
   return 'bg-gray-500';
 };
 
-export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, onSwipeLeft, onSwipeRight, onPriorityUpdated }: LeadCardProps) => {
+export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, onSwipeLeft, onSwipeRight, onPriorityUpdated, swipeEnabled = true }: LeadCardProps) => {
   const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isCancelled, setIsCancelled] = useState(false);
@@ -88,9 +89,11 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
 
   const handlers = useSwipeable({
     onSwiping: (eventData) => {
+      if (!swipeEnabled) return;
       setSwipeOffset(eventData.deltaX);
     },
     onSwipedLeft: () => {
+      if (!swipeEnabled) return;
       if (onSwipeLeft) {
         setIsCancelled(true);
         onSwipeLeft(lead);
@@ -99,6 +102,7 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
       setSwipeOffset(0);
     },
     onSwipedRight: () => {
+      if (!swipeEnabled) return;
       if (onSwipeRight) {
         setReminderSet(true);
         onSwipeRight(lead);
@@ -107,11 +111,14 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
       setSwipeOffset(0);
     },
     onSwiped: () => {
+      if (!swipeEnabled) return;
       setSwipeOffset(0);
     },
-    trackMouse: true,
-    delta: 50,
+    trackMouse: swipeEnabled,
+    delta: swipeEnabled ? 50 : 100000,
   });
+
+  const effectiveSwipeOffset = swipeEnabled ? swipeOffset : 0;
 
   const handleCall = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -166,18 +173,18 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
     <>
       <div 
         {...handlers}
-        className="relative"
+        className={`relative ${!swipeEnabled ? 'touch-pan-y' : ''}`}
         style={{
-          transform: `translateX(${swipeOffset}px)`,
-          transition: swipeOffset === 0 ? 'transform 0.3s ease-out' : 'none',
+          transform: `translateX(${effectiveSwipeOffset}px)`,
+          transition: effectiveSwipeOffset === 0 ? 'transform 0.3s ease-out' : 'none',
         }}
       >
-        {swipeOffset < -50 && (
+        {swipeEnabled && effectiveSwipeOffset < -50 && (
           <div className="absolute inset-y-0 right-0 flex items-center justify-center px-4 bg-red-500 text-white rounded-r-lg z-0">
             <XCircle className="h-6 w-6" />
           </div>
         )}
-        {swipeOffset > 50 && (
+        {swipeEnabled && effectiveSwipeOffset > 50 && (
           <div className="absolute inset-y-0 left-0 flex items-center justify-center px-4 bg-blue-500 text-white rounded-l-lg z-0">
             <Bell className="h-6 w-6" />
           </div>
@@ -185,7 +192,7 @@ export const LeadCard = ({ lead, onClick, onAssign, showAssignButton = false, on
 
         {isCancelled && (
           <div className="absolute top-2 right-2 z-10 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium animate-fade-in">
-            ✗ Cancelled
+            ✗ Cancellations
           </div>
         )}
         {reminderSet && (
