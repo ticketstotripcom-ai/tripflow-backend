@@ -45,8 +45,8 @@ export function DateRangePicker({ value, onChange, placeholder = 'Select date ra
           <Calendar
             mode="range"
             numberOfMonths={1}
-            selected={{ from: value?.from, to: value?.to } as any}
-            onSelect={(r: any) => onChange?.(r || {})}
+            selected={value}
+            onSelect={(r: DateRange | undefined) => onChange?.(r || {})}
             defaultMonth={value?.from}
           />
           <div className="flex justify-end gap-2 pt-2">

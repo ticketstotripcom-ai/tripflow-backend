@@ -4,10 +4,41 @@ import { parseFlexibleDate as parseFlexibleDateUtil, formatSheetDate } from './d
 import { enqueue } from './offlineQueue';
 import { parseServiceAccountJson, ServiceAccountJson } from './serviceAccount';
 
+// Add these interfaces for type safety 
+export interface GoogleSheetsApiResponse {
+  sheets: SheetData[];
+}
+
+export interface SheetData {
+  data: {
+    rowData: RowData[];
+  }[];
+}
+
+export interface RowData {
+  values: CellData[];
+}
+
+export interface CellData {
+  effectiveValue?: {
+    stringValue?: string;
+    numberValue?: number;
+  };
+  note?: string;
+}
+
+export interface GSheetError {
+  error: {
+    code: number;
+    message: string;
+    status: string;
+  };
+}
+
 export interface GoogleSheetsConfig {
   apiKey?: string;
   // Can be a raw JSON string or a parsed object
-  serviceAccountJson?: any;
+  serviceAccountJson?: ServiceAccountJson;
   sheetId: string;
   worksheetNames: string[];
   columnMappings: Record<string, string>;
@@ -46,10 +77,10 @@ export interface SheetLead {
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 // Optional safe fallback for Node-style Google client usage
-export function getAuthorizedClient(serviceAccountJson: any) {
+export function getAuthorizedClient(serviceAccountJson: ServiceAccountJson) {
   try {
     if (!serviceAccountJson) throw new Error('Missing service account JSON');
-    // @ts-ignore - `google` may not be available in this environment; this is an optional helper
+    // @ts-expect-error - `google` may not be available in this environment; this is an optional helper
     return new google.auth.JWT({
       email: serviceAccountJson.client_email,
       key: String(serviceAccountJson.private_key || '').replace(/\\n/g, '\n'),
@@ -85,7 +116,9 @@ export class GoogleSheetsService {
         if (saved) {
           sa = saved;
         }
-      } catch {}
+      } catch (e) {
+        // Ignore potential security errors from localStorage access
+      }
     }
 
     if (!sa) return null;
@@ -189,12 +222,12 @@ export class GoogleSheetsService {
 
   /** Fetch users */
   async fetchUsers(): Promise<SheetUser[]> {
-    let worksheetName = this.normalizeSheetName(this.config.worksheetNames[1] || 'BACKEND SHEET');
+    const worksheetName = this.normalizeSheetName(this.config.worksheetNames[1] || 'BACKEND SHEET');
     // Read the entire used range by specifying only the sheet name
     const range = `${worksheetName}`;
 
     let url: string;
-    let headers: Record<string, string> = {};
+    const headers: Record<string, string> = {};
     // Prefer service account if available (works for private sheets)
     if (this.config.serviceAccountJson) {
       const sa = this.getParsedServiceAccount();
@@ -215,14 +248,14 @@ export class GoogleSheetsService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
     const data = await response.json();
-    let rows: any[][] = data.values || [];
+    const rows: (string | number | null)[][] = data.values || [];
 
     // ✅ Skip the header row
-    if (rows.length > 1) rows = rows.slice(1);
+    const slicedRows = rows.length > 1 ? rows.slice(1) : [];
 
     // Map using fixed columns per spec: C,D,E,M,N (0-based: 2,3,4,12,13)
-    return rows
-      .map((row: any[]) => ({
+    return slicedRows
+      .map((row: (string | number | null)[]) => ({
         name: String(row[2] ?? '').trim(),
         email: String(row[3] ?? '').trim(),
         phone: String(row[4] ?? '').trim(),
@@ -248,9 +281,9 @@ export class GoogleSheetsService {
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
 
-    const row: any[] = [];
+    const row: (string | number | null)[] = [];
     const maxCol = Math.max(
-      ...['name','email','phone','role','password']
+      ...['name', 'email', 'phone', 'role', 'password']
         .map((k) => cm[k as keyof typeof cm] || '')
         .filter(Boolean)
         .map((c) => this.columnToIndex(c))
@@ -267,7 +300,7 @@ export class GoogleSheetsService {
 
     Object.entries(mapping).forEach(([key, col]) => {
       const idx = this.columnToIndex(col);
-      const value = (user as any)[key];
+      const value = user[key as keyof SheetUser];
       row[idx] = value ?? '';
     });
 
@@ -298,7 +331,7 @@ export class GoogleSheetsService {
     const range = `${worksheetName}`;
 
     let url: string;
-    let headers: Record<string, string> = {};
+    const headers: Record<string, string> = {};
     // Prefer service account if available (works for private sheets)
     if (this.config.serviceAccountJson) {
       const sa = this.getParsedServiceAccount();
@@ -319,9 +352,9 @@ export class GoogleSheetsService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`Failed to fetch leads: ${response.statusText}`);
     const data = await response.json();
-    const allRows: any[][] = data.values || [];
+    const allRows: (string | number | null)[][] = data.values || [];
     // ✅ Skip header row
-    const rows: any[][] = allRows.length > 1 ? allRows.slice(1) : [];
+    const rows: (string | number | null)[][] = allRows.length > 1 ? allRows.slice(1) : [];
     const cm = this.config.columnMappings;
 
     // ✅ CRITICAL FIX: Get the actual starting row from the range response
@@ -341,27 +374,30 @@ export class GoogleSheetsService {
       const metadataResponse = await fetch(metadataUrl, { headers: metadataHeaders });
       
       if (metadataResponse.ok) {
-        const metadataData = await metadataResponse.json();
+        const metadataData: GoogleSheetsApiResponse = await metadataResponse.json();
         const rowData = metadataData.sheets?.[0]?.data?.[0]?.rowData || [];
         
         // Map which rows have data (skip header at index 0)
-        rowData.forEach((row: any, index: number) => {
+        rowData.forEach((row: RowData, index: number) => {
           if (index === 0) return; // skip header row
-          if (row.values && row.values.some((v: any) => v.effectiveValue)) {
+          if (row.values && row.values.some((v: CellData) => v.effectiveValue)) {
             actualRowNumbers.push(index + 1); // actual sheet row number
           }
         });
         
         console.log(`📊 Found ${actualRowNumbers.length} data rows (excluding header) out of ${rowData.length} total rows`);
+      } else {
+        const errorData: GSheetError = await metadataResponse.json();
+        console.warn('⚠️ Failed to fetch row metadata:', errorData.error.message);
       }
     } catch (err) {
       console.warn('⚠️ Failed to fetch row metadata, falling back to sequential numbering:', err);
       // Fallback: assume sequential numbering
-      actualRowNumbers = rows.map((_: any, i: number) => i + 2); // rows[] is header-sliced, so +2 is correct
+      actualRowNumbers = rows.map((_, i: number) => i + 2); // rows[] is header-sliced, so +2 is correct
     }
 
     // Optional notes
-    let notesMap: Record<number, string> = {};
+    const notesMap: Record<number, string> = {};
     try {
       const notesUrl = this.config.serviceAccountJson
         ? `${SHEETS_API_BASE}/${this.config.sheetId}?ranges=${encodeURIComponent(worksheetName)}&fields=sheets.data.rowData.values.note`
@@ -372,12 +408,12 @@ export class GoogleSheetsService {
         : {};
       const notesResponse = await fetch(notesUrl, { headers: notesHeaders });
       if (notesResponse.ok) {
-        const notesData = await notesResponse.json();
+        const notesData: GoogleSheetsApiResponse = await notesResponse.json();
         const rowData = notesData.sheets?.[0]?.data?.[0]?.rowData || [];
-        rowData.forEach((row: any, index: number) => {
+        rowData.forEach((row: RowData, index: number) => {
           if (index === 0) return; // skip header row
           const cellNotes: string[] = (row.values || [])
-            .map((v: any) => (v && v.note ? String(v.note) : ''))
+            .map((v: CellData) => (v && v.note ? String(v.note) : ''))
             .filter((s: string) => !!s);
           if (cellNotes.length) notesMap[index - 1] = cellNotes.join(' | '); // align with header-sliced rows
         });
@@ -387,7 +423,7 @@ export class GoogleSheetsService {
     }
 
     const leads = rows
-      .map((row: any[], i: number) => {
+      .map((row: (string | number | null)[], i: number) => {
         const travellerName = row[this.columnToIndex(cm.travellerName || 'E')] || '';
         const dateAndTime = row[this.columnToIndex(cm.dateAndTime || 'B')] || '';
         
@@ -395,27 +431,27 @@ export class GoogleSheetsService {
         const actualRow = actualRowNumbers[i] || (i + 2);
         
         return {
-          tripId: row[this.columnToIndex(cm.tripId || 'A')] || '',
-          dateAndTime,
-          consultant: row[this.columnToIndex(cm.consultant || 'C')] || '',
-          status: row[this.columnToIndex(cm.status || 'D')] || '',
-          travellerName,
-          travelDate: row[this.columnToIndex(cm.travelDate || 'G')] || '',
-          travelState: row[this.columnToIndex(cm.travelState || 'H')] || '',
-          remarks: row[this.columnToIndex(cm.remarks || 'K')] || '',
-          nights: row[this.columnToIndex(cm.nights || 'L')] || '',
-          pax: row[this.columnToIndex(cm.pax || 'M')] || '',
-          hotelCategory: row[this.columnToIndex(cm.hotelCategory || 'N')] || '',
-          mealPlan: row[this.columnToIndex(cm.mealPlan || 'O')] || '',
-          phone: row[this.columnToIndex(cm.phone || 'P')] || '',
-          email: row[this.columnToIndex(cm.email || 'Q')] || '',
-          priority: row[this.columnToIndex(cm.priority || '')] || '',
+          tripId: String(row[this.columnToIndex(cm.tripId || 'A')] || ''),
+          dateAndTime: String(dateAndTime),
+          consultant: String(row[this.columnToIndex(cm.consultant || 'C')] || ''),
+          status: String(row[this.columnToIndex(cm.status || 'D')] || ''),
+          travellerName: String(travellerName),
+          travelDate: String(row[this.columnToIndex(cm.travelDate || 'G')] || ''),
+          travelState: String(row[this.columnToIndex(cm.travelState || 'H')] || ''),
+          remarks: String(row[this.columnToIndex(cm.remarks || 'K')] || ''),
+          nights: String(row[this.columnToIndex(cm.nights || 'L')] || ''),
+          pax: String(row[this.columnToIndex(cm.pax || 'M')] || ''),
+          hotelCategory: String(row[this.columnToIndex(cm.hotelCategory || 'N')] || ''),
+          mealPlan: String(row[this.columnToIndex(cm.mealPlan || 'O')] || ''),
+          phone: String(row[this.columnToIndex(cm.phone || 'P')] || ''),
+          email: String(row[this.columnToIndex(cm.email || 'Q')] || ''),
+          priority: String(row[this.columnToIndex(cm.priority || '')] || ''),
           remarkHistory:
             (cm.remarkHistory
-              ? (row[this.columnToIndex(cm.remarkHistory || '')] || '').toString().split(';')
+              ? (String(row[this.columnToIndex(cm.remarkHistory || '')] || '')).split(';')
               : []) || [],
           notes: notesMap[i] || '',
-          timeStamp: cm.timeStamp ? (row[this.columnToIndex(cm.timeStamp || '')] || '') : undefined,
+          timeStamp: cm.timeStamp ? String((row[this.columnToIndex(cm.timeStamp || '')] || '')) : undefined,
           // ✅ CRITICAL: Store the ACTUAL row number from Google Sheets
           _rowNumber: actualRow,
         };
@@ -459,7 +495,7 @@ export class GoogleSheetsService {
     const token = await this.getAccessToken();
     const cm = this.config.columnMappings;
 
-    const row: any[] = [];
+    const row: (string | number | null)[] = [];
     const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
 
     for (let i = 0; i <= maxCol; i++) row[i] = '';
@@ -468,7 +504,7 @@ export class GoogleSheetsService {
       if (!col) continue;
       const idx = this.columnToIndex(col);
       if (key in lead && lead[key as keyof SheetLead] !== undefined) {
-        let value = lead[key as keyof SheetLead] as any;
+        let value = lead[key as keyof SheetLead];
         if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
           value = formatSheetDate(value);
         }
@@ -499,29 +535,18 @@ export class GoogleSheetsService {
   // Date parsing/formatting is provided by dateUtils
 
   /** Update a lead by (date+traveller) using stored row number */
-  async updateLead(dateAndTime: string, travellerName: string, updates: Partial<SheetLead>): Promise<void>;
-  async updateLead(lead: Pick<SheetLead, 'dateAndTime' | 'travellerName'>, updates: Partial<SheetLead>): Promise<void>;
-  async updateLead(a: any, b: any, c?: any): Promise<void> {
-    let dateAndTime: string;
-    let travellerName: string;
-    let updates: Partial<SheetLead>;
-
-    if (typeof a === 'string') {
-      dateAndTime = a;
-      travellerName = b;
-      updates = c || {};
-    } else {
-      dateAndTime = a?.dateAndTime;
-      travellerName = a?.travellerName;
-      updates = b || {};
-    }
+  async updateLead(
+    identity: { dateAndTime: string; travellerName: string },
+    updates: Partial<SheetLead>
+  ): Promise<void> {
+    const { dateAndTime, travellerName } = identity;
 
     if (!dateAndTime || !travellerName) {
       throw new Error('Date + Traveller Name required to update lead');
     }
 
     if (!navigator.onLine) {
-      await enqueue({ type: 'updateLead', config: this.config, identity: { dateAndTime, travellerName }, updates: updates || {} });
+      await enqueue({ type: 'updateLead', config: this.config, identity, updates });
       console.log('📥 Offline: queued updateLead for later sync');
       return;
     }
@@ -531,26 +556,36 @@ export class GoogleSheetsService {
     const targetDate = parseFlexibleDateUtil(dateAndTime);
 
     const sameDay = (d1: Date | null, d2: Date | null) =>
-      !!d1 && !!d2 && 
-      d1.getFullYear() === d2.getFullYear() && 
-      d1.getMonth() === d2.getMonth() && 
+      !!d1 &&
+      !!d2 &&
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
       d1.getDate() === d2.getDate();
 
     const matchedLead = leads.find((l) => {
       const ld = parseFlexibleDateUtil(l.dateAndTime);
-      const dateMatch = sameDay(targetDate, ld) || String(l.dateAndTime).trim() === String(dateAndTime).trim();
-      const nameMatch = String(l.travellerName).trim().toLowerCase() === String(travellerName).trim().toLowerCase();
+      const dateMatch =
+        sameDay(targetDate, ld) ||
+        String(l.dateAndTime).trim() === String(dateAndTime).trim();
+      const nameMatch =
+        String(l.travellerName).trim().toLowerCase() ===
+        String(travellerName).trim().toLowerCase();
       return dateMatch && nameMatch;
     });
 
     if (!matchedLead) {
       console.error('❌ Lead not found. Search criteria:', { dateAndTime, travellerName });
-      console.error('📋 Available leads sample:', leads.slice(0, 3).map(l => ({
-        date: l.dateAndTime,
-        name: l.travellerName,
-        row: l._rowNumber
-      })));
-      throw new Error(`Lead not found for Date: "${dateAndTime}" and Traveller: "${travellerName}"`);
+      console.error(
+        '📋 Available leads sample:',
+        leads.slice(0, 3).map((l) => ({
+          date: l.dateAndTime,
+          name: l.travellerName,
+          row: l._rowNumber,
+        }))
+      );
+      throw new Error(
+        `Lead not found for Date: "${dateAndTime}" and Traveller: "${travellerName}"`
+      );
     }
 
     if (!matchedLead._rowNumber || matchedLead._rowNumber < 2) {
@@ -558,7 +593,7 @@ export class GoogleSheetsService {
     }
 
     const rowNumber = matchedLead._rowNumber;
-    
+
     console.log(`🎯 Updating lead:`, {
       date: dateAndTime,
       traveller: travellerName,
@@ -576,28 +611,36 @@ export class GoogleSheetsService {
     console.log('✅ Using valid service account credentials');
     const token = await this.getAccessToken();
 
-    const updateData: { range: string; values: any[][] }[] = [];
-    
+    const updateData: { range: string; values: (string | number | null)[][] }[] = [];
+
     for (const [key, rawValue] of Object.entries(updates)) {
-      if (rawValue === undefined || ['tripId', 'dateAndTime', 'notes', '_rowNumber'].includes(key)) {
+      if (
+        rawValue === undefined ||
+        ['tripId', 'dateAndTime', 'notes', '_rowNumber'].includes(key)
+      ) {
         continue;
       }
-      
+
       const col = cm[key as keyof typeof cm];
       if (!col) continue;
 
-      let value: any = rawValue;
-      
-      if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
+      let value: string | number | null = rawValue as any;
+
+      if (
+        (key === 'travelDate' || key === 'dateAndTime' || key === 'date') &&
+        typeof value === 'string'
+      ) {
         value = formatSheetDate(value);
       }
 
-      const cellRange = `${this.normalizeSheetName(this.config.worksheetNames[0])}!${col}${rowNumber}`;
-      updateData.push({ 
-        range: cellRange, 
-        values: [[value]] 
+      const cellRange = `${this.normalizeSheetName(
+        this.config.worksheetNames[0]
+      )}!${col}${rowNumber}`;
+      updateData.push({
+        range: cellRange,
+        values: [[value]],
       });
-      
+
       console.log(`  📝 Updating ${cellRange} = "${value}"`);
     }
 
@@ -618,9 +661,9 @@ export class GoogleSheetsService {
       console.error('❌ Failed to update lead in Google Sheets:', errText);
       throw new Error(errText);
     }
-    
+
     console.log(`✅ Lead updated successfully at row ${rowNumber}`);
-    
+
     this.clearLeadsCache();
   }
 }

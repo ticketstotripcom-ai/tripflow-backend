@@ -19,9 +19,9 @@ export default function MonthlyBookedReport({ leads }: MonthlyBookedReportProps)
 
   const booked = leads.filter((l) => (l.status || '').toLowerCase().includes('booked'));
   const enriched = booked
-    .map((l) => {
+    .map((l: SheetLead) => {
       const noteDate = extractAnyDateFromText(l.notes);
-      const timestampDate = (l as any).timeStamp ? parseFlexibleDate((l as any).timeStamp) : null;
+      const timestampDate = l.timeStamp ? parseFlexibleDate(l.timeStamp) : null;
       const createdDate = parseFlexibleDate(l.dateAndTime);
       const travelDate = parseFlexibleDate(l.travelDate);
       const baseDate = noteDate || timestampDate || createdDate || travelDate;

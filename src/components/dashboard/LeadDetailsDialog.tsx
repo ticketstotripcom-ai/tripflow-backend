@@ -86,7 +86,7 @@ function parseAnyDate(str: string): Date | undefined {
 }
 function dateToDDMMYYYY(date: Date | string | undefined): string {
   if (!date) return "";
-  let d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date();
+  const d: Date = date instanceof Date ? date : parseAnyDate(date) || new Date();
   if (isNaN(d.getTime())) return "";
   const dd = String(d.getDate()).padStart(2,'0');
   const mm = String(d.getMonth()+1).padStart(2,'0');

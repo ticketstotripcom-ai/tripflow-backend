@@ -5,6 +5,9 @@ const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 type Headers = Record<string, string>;
 
+// Define a type for a cell value
+type CellValue = string | number | null;
+
 function normalizeSheetName(name: string): string {
   if (!name) return '';
   return name.includes('!') ? name.split('!')[0] : name;
@@ -64,9 +67,9 @@ async function getAccessToken(serviceAccountJson?: string): Promise<string> {
 }
 
 export interface SheetService {
-  appendRow: (sheetName: string, row: any[]) => Promise<void>;
-  getRows: (sheetName: string, range?: string) => Promise<any[][]>;
-  batchUpdateCells: (sheetName: string, cells: Array<{ row: number; column: number; value: any }>) => Promise<void>;
+  appendRow: (sheetName: string, row: CellValue[]) => Promise<void>;
+  getRows: (sheetName: string, range?: string) => Promise<CellValue[][]>;
+  batchUpdateCells: (sheetName: string, cells: Array<{ row: number; column: number; value: CellValue }>) => Promise<void>;
 }
 
 export async function useSheetService(): Promise<SheetService> {
@@ -78,9 +81,13 @@ export async function useSheetService(): Promise<SheetService> {
   let serviceAccountJson = credentials.googleServiceAccountJson;
   // Fallback to localStorage for service account JSON (preview resilience)
   if (!serviceAccountJson) {
-    try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+    try {
+      serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
+    } catch (e) {
+      console.warn('Could not read service account from localStorage', e);
+    }
     if (!serviceAccountJson) {
-      serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+      serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
     }
   }
 
@@ -93,7 +100,7 @@ export async function useSheetService(): Promise<SheetService> {
     return headers;
   };
 
-  const appendRow = async (sheetName: string, row: any[]) => {
+  const appendRow = async (sheetName: string, row: CellValue[]) => {
     if (!sheetName) {
       throw new Error('Missing sheet name for append operation.');
     }
@@ -108,23 +115,30 @@ export async function useSheetService(): Promise<SheetService> {
     );
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
-      try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
-      if (!serviceAccountJson) {
-        serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+      try {
+        serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
+      } catch (e) {
+        console.warn('Could not read service account from localStorage', e);
       }
-      if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+      if (!serviceAccountJson) {
+        serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
+      }
+      if (!serviceAccountJson)
+        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
     const range = `${normalizedSheet}`;
     const token = await getAccessToken(serviceAccountJson);
     console.log(`✅ Appending to sheet: ${normalizedSheet}`);
     console.log('✅ Using Service Account for Sheets write operation');
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(
+      range
+    )}:append?valueInputOption=USER_ENTERED`;
     const headers: Headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ values: [row] }) });
     if (!res.ok) throw new Error(await res.text());
   };
 
-  const getRows = async (sheetName: string, _range?: string) => {
+  const getRows = async (sheetName: string, _range?: string): Promise<CellValue[][]> => {
     if (!sheetName) throw new Error('Missing sheet name for read operation.');
     const normalizedSheet = normalizeSheetName(
       (() => {
@@ -135,17 +149,22 @@ export async function useSheetService(): Promise<SheetService> {
         return sheetName;
       })()
     );
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${!serviceAccountJson && apiKey ? `?key=${apiKey}` : ''}`;
+    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${
+      !serviceAccountJson && apiKey ? `?key=${apiKey}` : ''
+    }`;
     const headers = await authHeaders();
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    let values: any[][] = (data.values || []) as any[][];
+    let values: CellValue[][] = (data.values || []) as CellValue[][];
     if (values.length > 1) values = values.slice(1); // ✅ Skip header row universally
     return values;
   };
 
-  const batchUpdateCells = async (sheetName: string, cells: Array<{ row: number; column: number; value: any }>) => {
+  const batchUpdateCells = async (
+    sheetName: string,
+    cells: Array<{ row: number; column: number; value: CellValue }>
+  ) => {
     if (!sheetName) throw new Error('Missing sheet name for update operation.');
     if (!cells || cells.length === 0) return;
     const normalizedSheet = normalizeSheetName(
@@ -159,11 +178,16 @@ export async function useSheetService(): Promise<SheetService> {
     );
     if (!serviceAccountJson) {
       console.error('⚠️ Service Account JSON missing, using localStorage fallback');
-      try { serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
-      if (!serviceAccountJson) {
-        serviceAccountJson = await readPersistedServiceAccountJson() || undefined;
+      try {
+        serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
+      } catch (e) {
+        console.warn('Could not read service account from localStorage', e);
       }
-      if (!serviceAccountJson) throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+      if (!serviceAccountJson) {
+        serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
+      }
+      if (!serviceAccountJson)
+        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
     }
 
     const token = await getAccessToken(serviceAccountJson);

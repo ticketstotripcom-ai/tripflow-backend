@@ -41,7 +41,7 @@ export function parseFlexibleDate(input: DateInput): Date | null {
   }
 
   // dd/mm/yyyy or dd-mm-yyyy (ambiguous with mm/dd/yyyy). If first > 12, treat as dd/mm/yyyy
-  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (m) {
     const a = Number(m[1]);
     const b = Number(m[2]);

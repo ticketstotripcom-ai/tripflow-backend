@@ -47,20 +47,24 @@ function decodeBase64(value: string): string | null {
       }
       return binary;
     }
-  } catch {}
+  } catch (e) {
+    // Ignore atob errors
+  }
 
   try {
-    const globalBuffer = (globalThis as any)?.Buffer;
+    const globalBuffer = (globalThis as unknown as { Buffer: typeof Buffer })?.Buffer;
     if (globalBuffer) {
       return globalBuffer.from(value, 'base64').toString('utf-8');
     }
-  } catch {}
+  } catch (e) {
+    // Ignore Buffer errors
+  }
   return null;
 }
 
 function loadServiceAccountJsonFromEnv(): string | null {
   try {
-    const env = (import.meta as any)?.env || {};
+    const env = (import.meta as { env: Record<string, string> })?.env || {};
     const raw = env.VITE_SERVICE_ACCOUNT_JSON ?? env.VITE_SERVICE_ACCOUNT_JSON_BASE64;
     if (!raw || typeof raw !== 'string') return null;
     const trimmed = raw.trim();
