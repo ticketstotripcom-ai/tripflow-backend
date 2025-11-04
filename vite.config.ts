@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
-// https://vitejs.dev/config/
 export default defineConfig(async ({ mode }) => {
   let devPlugins: any[] = [];
 
@@ -18,13 +17,17 @@ export default defineConfig(async ({ mode }) => {
   return {
     base: "./",
     server: {
-      host: "::",
+      host: "0.0.0.0",
       port: 8080,
     },
     preview: {
-      host: "::",
+      host: "0.0.0.0",
       port: 8080,
-      allowedHosts: ["tripflow-backend-6xzr.onrender.com"], // ✅ Allow Render backend URL
+      allowedHosts: [
+        "localhost",
+        "127.0.0.1",
+        "tripflow-backend-6xzr.onrender.com",
+      ],
     },
     plugins: [react(), ...devPlugins].filter(Boolean),
     resolve: {
