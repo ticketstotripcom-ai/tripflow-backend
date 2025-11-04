@@ -4,13 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 8080",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
-    "lint": "eslint .",
-    "preview": "vite preview --host 0.0.0.0 --port 8080",
-    "start": "node server.js"
-  },
+  "dev": "vite --host 0.0.0.0 --port 8080",
+  "build": "vite build",
+  "start": "node server.js"
+},
   "dependencies": {
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.0",
