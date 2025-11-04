@@ -24,6 +24,7 @@ export default defineConfig(async ({ mode }) => {
     preview: {
       host: "::",
       port: 8080,
+      allowedHosts: ["tripflow-backend-6xzr.onrender.com"], // ✅ Allow Render backend URL
     },
     plugins: [react(), ...devPlugins].filter(Boolean),
     resolve: {
