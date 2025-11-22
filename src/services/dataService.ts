@@ -1,5 +1,6 @@
-import { cacheService, changeQueue } from "../utils/cacheService";
-import { GoogleSheetsService } from "../lib/googleSheets"; // ✅ adjust import if path differs
+import { cacheService, changeQueue, mergeData } from "../utils/cacheService";
+import { GoogleSheetsService } from "../lib/googleSheets";
+import { secureStorage } from "../lib/secureStorage";
 
 /**
  * Syncs new or updated data from Google Sheets since the last sync timestamp.
@@ -7,19 +8,35 @@ import { GoogleSheetsService } from "../lib/googleSheets"; // ✅ adjust import 
  */
 export async function syncData() {
   const lastSync = await cacheService.getLastSync();
+  
+  try {
+    // Get credentials
+    const credentials = await secureStorage.getCredentials();
+    if (!credentials) throw new Error('Google Sheets not configured');
 
-  // ✅ Fetch updates directly from Google Sheets
-  const updates = await GoogleSheetsService.getUpdatesSince
-    ? await GoogleSheetsService.getUpdatesSince(lastSync)
-    : await GoogleSheetsService.getAllData(); // fallback if incremental not implemented
+    // Create sheets service
+    const sheetsService = new GoogleSheetsService({
+      apiKey: credentials.googleApiKey,
+      serviceAccountJson: credentials.googleServiceAccountJson,
+      sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+      worksheetNames: credentials.worksheetNames,
+      columnMappings: credentials.columnMappings
+    });
 
-  const current = (await cacheService.getData()) || [];
-  const merged = mergeData(current, updates);
+    // Fetch all data (Google Sheets doesn't support incremental sync natively)
+    const updates = await sheetsService.fetchLeads(true); // force refresh
 
-  await cacheService.setData(merged);
-  await cacheService.setLastSync(Date.now());
+    const current = (await cacheService.getData()) || [];
+    const merged = mergeData(current, updates);
 
-  return merged;
+    await cacheService.setData(merged);
+    await cacheService.setLastSync(Date.now());
+
+    return merged;
+  } catch (error) {
+    console.error('Sync error:', error);
+    throw error;
+  }
 }
 
 /**
@@ -43,8 +60,20 @@ export async function saveRecord(record: any) {
 
   // ✅ Save to Google Sheets immediately
   try {
-    const result = await GoogleSheetsService.saveRecord(record);
-    return { success: true, ...result };
+    const credentials = await secureStorage.getCredentials();
+    if (!credentials) throw new Error('Google Sheets not configured');
+
+    const sheetsService = new GoogleSheetsService({
+      apiKey: credentials.googleApiKey,
+      serviceAccountJson: credentials.googleServiceAccountJson,
+      sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+      worksheetNames: credentials.worksheetNames,
+      columnMappings: credentials.columnMappings
+    });
+
+    // For now, append the record as a new row
+    await sheetsService.appendRow('MASTER DATA', record);
+    return { success: true, message: "Record saved successfully" };
   } catch (err) {
     console.error("Error saving to Google Sheets:", err);
     return { success: false, error: err };
@@ -56,15 +85,50 @@ export async function saveRecord(record: any) {
  */
 export async function pushPendingChanges() {
   const pending = await changeQueue.getAll();
-  if (!pending.length || !navigator.onLine) return;
-
-  for (const record of pending) {
-    try {
-      await GoogleSheetsService.saveRecord(record);
-    } catch (err) {
-      console.error("Failed to sync offline record:", record, err);
-    }
+  
+  if (pending.length === 0) {
+    return;
   }
 
-  await changeQueue.clear();
+  console.log(`Attempting to sync ${pending.length} pending changes`);
+  
+  const failed: any[] = [];
+  
+  try {
+    const credentials = await secureStorage.getCredentials();
+    if (!credentials) throw new Error('Google Sheets not configured');
+
+    const sheetsService = new GoogleSheetsService({
+      apiKey: credentials.googleApiKey,
+      serviceAccountJson: credentials.googleServiceAccountJson,
+      sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+      worksheetNames: credentials.worksheetNames,
+      columnMappings: credentials.columnMappings
+    });
+
+    for (const record of pending) {
+      try {
+        await sheetsService.appendRow('MASTER DATA', record);
+        console.log('Successfully synced record:', record);
+      } catch (error) {
+        console.error('Failed to sync record:', record, error);
+        failed.push(record);
+      }
+    }
+
+    if (failed.length > 0) {
+      // Re-queue failed items
+      await changeQueue.clear();
+      for (const record of failed) {
+        await changeQueue.add(record);
+      }
+      
+      throw new Error(`Failed to sync ${failed.length} records`);
+    } else {
+      // All items synced successfully
+      await changeQueue.clear();
+    }
+  } catch (error) {
+    console.error('Error pushing pending changes:', error);
+  }
 }

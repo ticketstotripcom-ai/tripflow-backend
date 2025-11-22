@@ -32,3 +32,9 @@ export const changeQueue = {
     await localforage.setItem(QUEUE_KEY, []);
   }
 };
+
+export function mergeData(oldData: any[], updates: any[]) {
+  const map = new Map(oldData.map(item => [item.id, item]));
+  updates.forEach(u => map.set(u.id, u));
+  return Array.from(map.values());
+}

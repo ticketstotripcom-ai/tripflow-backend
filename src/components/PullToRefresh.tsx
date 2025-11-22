@@ -6,10 +6,11 @@ interface PullToRefreshProps {
   threshold?: number;
 }
 
-const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, threshold = 60 }) => {
+const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, threshold = 120 }) => {
   const startYRef = useRef<number | null>(null);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [pullCount, setPullCount] = useState(0);
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (window.scrollY <= 0) {
@@ -28,11 +29,18 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, thre
 
   const onTouchEnd = async () => {
     if (pull >= threshold && !refreshing) {
-      try {
-        setRefreshing(true);
-        await onRefresh();
-      } finally {
-        setRefreshing(false);
+      const newCount = pullCount + 1;
+      setPullCount(newCount);
+      
+      // Require double pull - reset counter after successful refresh
+      if (newCount >= 2) {
+        try {
+          setRefreshing(true);
+          await onRefresh();
+          setPullCount(0); // Reset counter after successful refresh
+        } finally {
+          setRefreshing(false);
+        }
       }
     }
     setPull(0);
@@ -45,7 +53,7 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, thre
         style={{ height: pull, transition: pull === 0 ? "height 200ms ease" : undefined }}
         className="flex items-center justify-center text-xs text-muted-foreground"
       >
-        {pull > 0 && (refreshing ? "Refreshing…" : "Release to refresh")}
+        {pull > 0 && (refreshing ? "Refreshing…" : pullCount >= 1 ? "Pull again to refresh" : "Pull harder to refresh")}
       </div>
       {children}
     </div>

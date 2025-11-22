@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { LeadCard } from "./LeadCard";
 import ProgressiveList from "@/components/ProgressiveList";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Plus, FileText } from "lucide-react";
+import { RefreshCw, Plus, FileText, Bell } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LeadDetailsDialog from "./LeadDetailsDialog";
 import ReminderDialog from "./ReminderDialog";
 import AddLeadDialog from "./AddLeadDialog";
+import { authService } from "@/lib/authService";
 import AssignLeadDialog from "./AssignLeadDialog";
 import LeadFilters from "./LeadFilters";
 import SearchBar from "./SearchBar";
@@ -19,9 +20,17 @@ import MonthlyBookedReport from "./MonthlyBookedReport";
 import CustomerJourney from "./CustomerJourney";
 import PullToRefresh from "@/components/PullToRefresh";
 import DailyReportDialog from "./DailyReportDialog";
+import { notifyAdmin } from "@/utils/notifyTriggers";
+import { API_BASE_URL } from "@/config/api";
 import { useLocation } from "react-router-dom";
 import { stateManager } from "@/lib/stateManager";
-import { normalizeStatus, isWorkingCategoryStatus, isBookedStatus, isCancelCategoryStatus } from "@/lib/leadStatus";
+import { useCRMData } from "@/hooks/useCRMData";
+import {
+  normalizeStatus,
+  isWorkingCategoryStatus,
+  isBookedStatus,
+  isCancelCategoryStatus,
+} from "@/lib/leadStatus";
 import { compareDescByDate, parseFlexibleDate } from "@/lib/dateUtils";
 
 interface AdminDashboardProps {
@@ -30,19 +39,20 @@ interface AdminDashboardProps {
 
 const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
   const location = useLocation();
-  const viewParam = new URLSearchParams(location.search).get('view');
-  const isAnalyticsOnly = viewParam === 'analytics';
-  console.log('AdminDashboard - view param:', viewParam, 'isAnalyticsOnly:', isAnalyticsOnly);
-  const [leads, setLeads] = useState<SheetLead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const viewParam = new URLSearchParams(location.search).get("view");
+  const isAnalyticsOnly = viewParam === "analytics";
+  console.log("AdminDashboard - view param:", viewParam, "isAnalyticsOnly:", isAnalyticsOnly);
+  const { leads: remoteLeads, loading, error, syncData } = useCRMData();
+  const [optimisticLeads, setOptimisticLeads] = useState<SheetLead[] | null>(null);
+  const leads = useMemo(() => optimisticLeads ?? remoteLeads, [optimisticLeads, remoteLeads]);
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
   const [showReminderDialog, setShowReminderDialog] = useState(false);
   const [reminderLead, setReminderLead] = useState<{ id: string; name: string } | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [leadToAssign, setLeadToAssign] = useState<SheetLead | null>(null);
   const [showDailyReport, setShowDailyReport] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState(() => stateManager.getSearchQuery());
+  const [sendingTest, setSendingTest] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const savedFilters = stateManager.getFilters();
   const [statusFilter, setStatusFilter] = useState(savedFilters.statusFilter);
   const [priorityFilter, setPriorityFilter] = useState(savedFilters.priorityFilter);
@@ -55,106 +65,38 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
     const saved = stateManager.getActiveTab();
     return saved || "working";
   });
-  const { toast } = useToast();
-  const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
+  const { toast } = useToast();
+  const sheetsServiceRef = useRef<GoogleSheetsService | null>(null);
 
-  const fetchLeads = async (silent = false, forceRefresh = false) => {
-    try {
-      setError(null);
-      // Check cache first unless force refresh
-      if (!forceRefresh) {
-        const cached = stateManager.getCachedLeads();
-        if (cached.isValid) {
-          setLeads(cached.leads);
-          if (!silent) setLoading(false);
-          console.log('Using cached leads');
-          return;
-        }
-      }
-
-      if (!silent) setLoading(true);
-      
-      const credentials = await secureStorage.getCredentials();
-      // Graceful analytics-only fallback when credentials are missing
-      if (!credentials || (!credentials.googleApiKey && !credentials.googleServiceAccountJson)) {
-        if (isAnalyticsOnly) {
-          // No creds in analytics-only mode: show empty analytics without error
-          setLeads([]);
-          if (!silent) setLoading(false);
-          return;
-        }
-        throw new Error('Google Sheets not configured');
-      }
-
-      let data: SheetLead[] = [];
-      // Prefer secure storage, fallback to localStorage for service account JSON
-      let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
-      if (!effectiveServiceAccountJson) {
-        try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
-      }
-
-      if (credentials.sheets && credentials.sheets.length > 0) {
-        const services = credentials.sheets.map((s) => new GoogleSheetsService({
-          apiKey: credentials.googleApiKey,
-          serviceAccountJson: effectiveServiceAccountJson,
-          sheetId: s.sheetId,
-          worksheetNames: s.worksheetNames || credentials.worksheetNames,
-          columnMappings: s.columnMappings || credentials.columnMappings,
-        }));
-        const results = await Promise.all(services.map(svc => svc.fetchLeads(forceRefresh)));
-        data = results.flat();
-      } else {
-        const sheetsService = new GoogleSheetsService({
-          apiKey: credentials.googleApiKey,
-          serviceAccountJson: effectiveServiceAccountJson,
-          sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
-          worksheetNames: credentials.worksheetNames,
-          columnMappings: credentials.columnMappings
-        });
-        data = await sheetsService.fetchLeads(forceRefresh);
-      }
-      setLeads(data);
-      stateManager.setCachedLeads(data);
-      
-      if (silent) {
-        console.log('Background sync completed');
-      }
-    } catch (error: any) {
-      if (!silent && !isAnalyticsOnly) {
-        toast({
-          variant: "destructive",
-          title: "Error fetching leads",
-          description: error.message,
-        });
-      } else {
-        console.error('Background sync error:', error);
-      }
-      if (!silent && !isAnalyticsOnly) setError(error.message || 'Failed to load dashboard data');
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLeads();
-  }, []);
-
-  // Silent background sync honoring cache TTL to avoid extra fetches
+  // Reset optimistic overlay when new data arrives
   useEffect(() => {
-    const interval = setInterval(() => {
-      const cached = stateManager.getCachedLeads();
-      if (!cached.isValid) {
-        fetchLeads(true); // Silent sync only when cache is stale
-      }
-    }, 15000); // check more frequently but fetch only if stale
-    return () => clearInterval(interval);
-  }, []);
+    setOptimisticLeads(null);
+  }, [remoteLeads]);
 
-  // Get unique consultants
-  const consultants = useMemo(() => {
-    const uniqueConsultants = [...new Set(leads.map(lead => lead.consultant).filter(Boolean))];
-    return uniqueConsultants;
-  }, [leads]);
+  // Deep-link: open lead if pending target is set
+  useEffect(() => {
+    try {
+      const pending = stateManager.consumePendingTarget();
+      if (pending) {
+        const match = leads.find((l) => {
+          const tn = (pending.travellerName || "").toLowerCase();
+          const ld = (pending.dateAndTime || "").trim();
+          return (
+            (tn && (l.travellerName || "").toLowerCase().includes(tn)) ||
+            (ld && (l.dateAndTime || "").trim() === ld) ||
+            (pending.tripId && l.tripId && l.tripId === pending.tripId)
+          );
+        });
+        if (match) setSelectedLead(match);
+      }
+    } catch {}
+  }, [leads]);
+
+  // Get unique consultants
+  const consultants = useMemo(() => {
+    const uniqueConsultants = [...new Set(leads.map(lead => lead.consultant).filter(Boolean))];
+    return uniqueConsultants;
+  }, [leads]);
 
   // Filter and search logic
   const filteredLeads = useMemo(() => {
@@ -262,24 +204,39 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
     });
   }, [leads, searchQuery, statusFilter, priorityFilter, dateFilter, dateFromFilter, dateToFilter, consultantFilter]);
 
-  // 🆕 NEW LEADS: blank or "unfollowed"
+  const applyLocalAssignment = useCallback((updatedLead: SheetLead) => {
+    setOptimisticLeads((prev) => {
+      const base = prev ?? leads;
+      const next = base.map((l) =>
+        (l.tripId && l.tripId === updatedLead.tripId) ||
+        ((l.travellerName || "").toLowerCase() === (updatedLead.travellerName || "").toLowerCase())
+          ? { ...l, consultant: updatedLead.consultant }
+          : l
+      );
+      stateManager.setCachedLeads(next);
+      return next;
+    });
+  }, [leads]);
+
+  // 🆕 NEW LEADS: blank or "unfollowed"
   const newLeads = useMemo(() =>
     filteredLeads.filter(lead => {
-      const status = (lead.status || "").toLowerCase();
-      const hasData =
-        lead.travellerName?.trim() ||
-        lead.phone?.trim() ||
-        lead.tripId?.trim();
-
-      return (
-        hasData &&
-        (status === "" || status.includes("unfollowed"))
-      );
+  
+      const status = (lead.status || "").toLowerCase();
+  
+      const hasData =
+        lead.travellerName?.trim() ||
+        lead.phone?.trim() ||
+        lead.tripId?.trim();
+  
+      return (
+        hasData &&
+        (status === "" || status.includes("unfollowed"))
+      );
     }).slice().sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)),
-    [filteredLeads]
-  );
+  );
 
-  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
+  // ⚙️ WORKING LEADS: follow-up + all ongoing statuses
   const workingLeads = useMemo(() =>
     filteredLeads.filter(lead => isWorkingCategoryStatus(lead.status)).slice().sort((a,b) => compareDescByDate(a.dateAndTime, b.dateAndTime)),
     [filteredLeads]
@@ -299,47 +256,46 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
 
   // Left swipe = mark cancellation
   const handleSwipeLeft = async (lead: SheetLead) => {
-    try {
+  
+    try {
       const credentials = await secureStorage.getCredentials();
       if (!credentials) throw new Error('Credentials not found');
-
+  
       let effectiveServiceAccountJson = credentials.googleServiceAccountJson;
       if (!effectiveServiceAccountJson) {
         try { effectiveServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
       }
       if (!effectiveServiceAccountJson) throw new Error('Service Account JSON missing');
-
+  
       const sheetsService = new GoogleSheetsService({
         apiKey: credentials.googleApiKey,
         serviceAccountJson: effectiveServiceAccountJson,
-        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
-        worksheetNames: credentials.worksheetNames,
-        columnMappings: credentials.columnMappings
-      });
-
-      // Optimistic UI update
-      setLeads((prev) => prev.map((l) =>
-        l.tripId === lead.tripId && l.travellerName === lead.travellerName && l.dateAndTime === lead.dateAndTime
-          ? { ...l, status: 'Cancellations' }
-          : l
-      ));
-
+  
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings
+      });
+  
       console.log('✅ Using Service Account for Sheets write operation');
       await sheetsService.updateLead(lead, { status: 'Cancellations' });
       toast({
         title: "Lead moved to Cancellations",
         description: `${lead.travellerName} moved to cancellations.`,
       });
-      // Force refresh to bypass cached leads so UI stays consistent
-      fetchLeads(false, true);
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
+      // Refresh to bypass cached leads so UI stays consistent
+      syncData(true);
+  
+    } catch (error: any) {
+  
+      toast({
+        variant: "destructive",
         title: "Failed to cancel lead",
-        description: error.message,
-      });
-    }
-  };
+  
+        description: error.message,
+      });
+  
+    }
+  };
 
   // Right swipe = open reminder dialog directly
   const handleSwipeRight = (lead: SheetLead) => {
@@ -348,24 +304,37 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
     toast({ title: "Reminder", description: `Add reminder for ${lead.travellerName}` });
   };
 
-  const renderLeadGrid = (leadsToRender: SheetLead[]) => {
-    if (loading) {
-      return (
-        <div className="text-center py-12">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading leads...</p>
-        </div>
-      );
-    }
-
-    if (leadsToRender.length === 0) {
-      return (
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">No leads found matching the criteria.</p>
-        </div>
-      );
-    }
-
+  const renderLeadGrid = (leadsToRender: SheetLead[]) => {
+    if (loading && leads.length === 0) {
+  
+      return (
+  
+        <div className="text-center py-12">
+  
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+  
+          <p className="text-muted-foreground">Loading leads...</p>
+  
+        </div>
+  
+      );
+  
+    }
+  
+    if (leadsToRender.length === 0) {
+  
+      return (
+  
+        <div className="text-center py-12 border-2 border-dashed rounded-lg">
+  
+          <p className="text-muted-foreground">No leads found matching the criteria.</p>
+  
+        </div>
+  
+      );
+  
+    }
+  
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <ProgressiveList
@@ -382,85 +351,176 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
               onSwipeLeft={handleSwipeLeft}
               onSwipeRight={handleSwipeRight}
               swipeEnabled={swipeEnabled}
-              onPriorityUpdated={(l, p) => {
-                setLeads(prev => prev.map(x => (
-                  x.tripId === l.tripId && x.travellerName === l.travellerName && x.dateAndTime === l.dateAndTime
-                    ? { ...x, priority: p }
-                    : x
-                )));
+              onPriorityUpdated={async () => {
+                try { await syncData(true); } catch {}
               }}
             />
           )}
         />
       </div>
     );
-  };
+  };
 
   return (
-    <PullToRefresh onRefresh={() => fetchLeads(false, true)}>
+    <PullToRefresh onRefresh={() => syncData(true)}>
     <div className="space-y-3 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">All Leads</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign leads to consultants</p>
-        </div>
-        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto">
-          <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
-            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span>Add Lead</span>
-          </Button>
-          <Button onClick={() => setShowDailyReport(true)} variant="secondary" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+  
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+  
+        <div>
+  
+          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">All Leads</h2>
+  
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage and assign leads to consultants</p>
+  
+        </div>
+        <div className="flex gap-1 sm:gap-2 w-full sm:w-auto items-center">
+          <Button onClick={() => setShowAddDialog(true)} className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Add Lead</span>
+          </Button>
+          <Button onClick={() => setShowDailyReport(true)} variant="secondary" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading || !!error}>
             <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
             <span>Daily Report</span>
           </Button>
-          <Button onClick={() => fetchLeads(false, true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
-            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </Button>
-        </div>
-      </div>
-
+          <Button
+            onClick={async () => {
+              try {
+                setSendingTest(true);
+                // Fire WS toast immediately
+                try {
+                  await fetch(`${API_BASE_URL}/notify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Test Notification', message: 'Hello Admin, this is a test.', type: 'admin' }),
+                  });
+                } catch (_) {}
+                // Persist to sheet for bell list
+                await notifyAdmin('Test Notification', 'Hello Admin, this is a test.', { route: '/dashboard?view=analytics' });
+                // Hint the bell to refresh immediately
+                window.dispatchEvent(new Event('sheet-notifications-refresh'));
+                toast({ title: 'Notification sent', description: 'Check the toast and bell.' });
+              } catch (e: any) {
+                toast({ variant: 'destructive', title: 'Send failed', description: e?.message || 'Unable to send test notification' });
+              } finally {
+                setSendingTest(false);
+              }
+            }}
+            variant="outline"
+            className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4"
+            disabled={sendingTest || loading}
+          >
+            <Bell className={`h-3 w-3 sm:h-4 sm:w-4 ${sendingTest ? 'animate-pulse' : ''}`} />
+            <span>Test Notify</span>
+          </Button>
+          <Button onClick={() => syncData(true)} variant="outline" className="gap-1 flex-1 sm:flex-initial text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4" disabled={loading}>
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+          {/* Notification bell shown in AppHeader globally; avoid duplicate here */}
+        </div>
+        </div>
+  
       {error && (
-        <p className="text-red-500 text-sm">Failed to load dashboard data.</p>
+        <div className="flex items-center justify-between bg-red-50 text-red-800 border border-red-200 rounded p-2 sm:p-3">
+          <span className="text-xs sm:text-sm">{error || 'Failed to load dashboard data.'}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => syncData(true)}>Retry</Button>
+            <Button size="sm" variant="secondary" onClick={() => window.location.hash = '#/settings'}>Open Settings</Button>
+          </div>
+        </div>
       )}
-
+  
+      {/* No results helper */}
+      {!loading && !error && leads.length > 0 && filteredLeads.length === 0 && (
+        <div className="flex items-center justify-between bg-amber-50 text-amber-800 border border-amber-200 rounded p-2 sm:p-3">
+          <span className="text-xs sm:text-sm">No leads match current filters.</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => {
+              setSearchQuery('');
+              setStatusFilter('All Statuses');
+              setPriorityFilter('All Priorities');
+              setDateFilter('');
+              setDateFromFilter('');
+              setDateToFilter('');
+              setConsultantFilter('All Consultants');
+              stateManager.setFilters({
+                statusFilter: 'All Statuses',
+                priorityFilter: 'All Priorities',
+                dateFilter: '',
+                dateFromFilter: '',
+                dateToFilter: '',
+                consultantFilter: 'All Consultants',
+              });
+              stateManager.setSearchQuery('');
+            }}>Clear filters</Button>
+          </div>
+        </div>
+      )}
+  
       <SearchBar value={searchQuery} onChange={(query) => {
-        setSearchQuery(query);
-        stateManager.setSearchQuery(query);
-      }} />
-
+  
+        setSearchQuery(query);
+  
+        stateManager.setSearchQuery(query);
+  
+      }} />
+  
       <LeadFilters
-        statusFilter={statusFilter}
-        priorityFilter={priorityFilter}
-        dateFilter={dateFilter}
+  
+        statusFilter={statusFilter}
+  
+        priorityFilter={priorityFilter}
+  
+        dateFilter={dateFilter}
         dateFromFilter={dateFromFilter}
         dateToFilter={dateToFilter}
-        consultantFilter={consultantFilter}
-        onStatusChange={(val) => {
-          setStatusFilter(val);
-          stateManager.setFilters({ statusFilter: val });
-        }}
-        onPriorityChange={(val) => {
-          setPriorityFilter(val);
-          stateManager.setFilters({ priorityFilter: val });
-        }}
-        onDateFilterChange={(val) => {
-          setDateFilter(val);
-          stateManager.setFilters({ dateFilter: val });
-        }}
+  
+        consultantFilter={consultantFilter}
+  
+        onStatusChange={(val) => {
+  
+          setStatusFilter(val);
+  
+          stateManager.setFilters({ statusFilter: val });
+  
+        }}
+  
+        onPriorityChange={(val) => {
+  
+          setPriorityFilter(val);
+  
+          stateManager.setFilters({ priorityFilter: val });
+  
+        }}
+  
+        onDateFilterChange={(val) => {
+  
+          setDateFilter(val);
+  
+          stateManager.setFilters({ dateFilter: val });
+  
+        }}
         onDateRangeChange={(from, to) => {
           setDateFromFilter(from);
           setDateToFilter(to);
           stateManager.setFilters({ dateFromFilter: from, dateToFilter: to });
         }}
-        onConsultantChange={(val) => {
-          setConsultantFilter(val);
-          stateManager.setFilters({ consultantFilter: val });
-        }}
-        consultants={consultants}
-        showConsultantFilter={true}
-      />
-
+  
+        onConsultantChange={(val) => {
+  
+          setConsultantFilter(val);
+  
+          stateManager.setFilters({ consultantFilter: val });
+  
+        }}
+  
+        consultants={consultants}
+  
+        showConsultantFilter={true}
+  
+      />
+  
       {isAnalyticsOnly ? (
         <div className="space-y-6">
           {/* ✅ Analytics View: DashboardStats, CustomerJourney, MonthlyBookedReport, UpcomingTrips */}
@@ -469,61 +529,76 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
           <MonthlyBookedReport leads={filteredLeads} />
         </div>
       ) : (
-        <Tabs value={activeTab} onValueChange={(tab) => {
-          setActiveTab(tab);
-          stateManager.setActiveTab(tab);
+  
+        <Tabs value={activeTab} onValueChange={(tab) => {
+  
+          setActiveTab(tab);
+  
+          stateManager.setActiveTab(tab);
         }} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="new">
-              New Leads ({newLeads.length})
-            </TabsTrigger>
-            <TabsTrigger value="working">
-              Working ({workingLeads.length})
-            </TabsTrigger>
-            <TabsTrigger value="booked">
-              Booked ({bookedLeads.length})
-            </TabsTrigger>
-            <TabsTrigger value="cancel">
-              Cancel ({cancelLeads.length})
+  
+            <TabsTrigger value="new">
+  
+              New Leads ({newLeads.length})
+  
             </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="new">
-            {renderLeadGrid(newLeads)}
-          </TabsContent>
-
-          <TabsContent value="working">
-            {renderLeadGrid(workingLeads)}
-          </TabsContent>
-
-          <TabsContent value="booked">
-            {renderLeadGrid(bookedLeads)}
-          </TabsContent>
-
+  
+            <TabsTrigger value="working">
+  
+              Working ({workingLeads.length})
+  
+            </TabsTrigger>
+  
+            <TabsTrigger value="booked">
+  
+              Booked ({bookedLeads.length})
+  
+            </TabsTrigger>
+              <TabsTrigger value="cancel">
+                Cancel ({cancelLeads.length})
+              </TabsTrigger>
+  
+            </TabsList>
+  
+            <TabsContent value="new">
+  
+              {renderLeadGrid(newLeads)}
+  
+            </TabsContent>
+  
+            <TabsContent value="working">
+  
+              {renderLeadGrid(workingLeads)}
+  
+            </TabsContent>
+  
+            <TabsContent value="booked">
+  
+              {renderLeadGrid(bookedLeads)}
+  
+            </TabsContent>
+  
           <TabsContent value="cancel">
             {renderLeadGrid(cancelLeads)}
           </TabsContent>
-        </Tabs>
-      )}
-
-      {selectedLead && (
+  
+        </Tabs>
+  
+        )}
+  
+      {selectedLead && (
         <LeadDetailsDialog
-          lead={selectedLead}
-          open={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
-          // Force refresh after saving to reflect changes immediately
-          onUpdate={() => fetchLeads(false, true)}
-          onImmediateUpdate={(updated) => {
-            // Optimistically update list so user sees instant change
-            setLeads((prev) => prev.map((l) =>
-              l.tripId === updated.tripId && l.travellerName === updated.travellerName && l.dateAndTime === updated.dateAndTime
-                ? { ...l, ...updated }
-                : l
-            ));
-          }}
-        />
-      )}
-
+  
+          lead={selectedLead}
+  
+          open={!!selectedLead}
+  
+          onClose={() => setSelectedLead(null)}
+          onUpdate={() => syncData(true)}
+        />
+      )}
+  
       {showReminderDialog && reminderLead && (
         <ReminderDialog
           open={showReminderDialog}
@@ -536,53 +611,32 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
           }}
         />
       )}
-
-      {showAddDialog && (
+  
+      {showAddDialog && (
         <AddLeadDialog
-          open={showAddDialog}
-          onClose={() => setShowAddDialog(false)}
-          // Force refresh after adding to include the new lead immediately
-          onSuccess={() => fetchLeads(false, true)}
-          onImmediateAdd={(newLead) => {
-            setLeads((prev) => [
-              {
-                tripId: newLead.tripId || '',
-                dateAndTime: newLead.dateAndTime || '',
-                consultant: (newLead as any).consultant || '',
-                status: newLead.status || 'Unfollowed',
-                travellerName: newLead.travellerName || '',
-                travelDate: newLead.travelDate || '',
-                travelState: newLead.travelState || '',
-                remarks: newLead.remarks || '',
-                nights: newLead.nights || '',
-                pax: newLead.pax || '',
-                hotelCategory: newLead.hotelCategory || '',
-                mealPlan: newLead.mealPlan || '',
-                phone: newLead.phone || '',
-                email: newLead.email || '',
-                priority: newLead.priority as any,
-                remarkHistory: [],
-                notes: '',
-                _rowNumber: undefined,
-              },
-              ...prev,
-            ]);
-          }}
-        />
-      )}
-
-      {leadToAssign && (
+  
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          onSuccess={() => syncData(true)}
+        />
+      )}
+  
+      {leadToAssign && (
         <AssignLeadDialog
-          open={!!leadToAssign}
-          onClose={() => setLeadToAssign(null)}
-          lead={leadToAssign}
-          consultants={consultants}
-          // Force refresh after assignment to reflect consultant change immediately
-          onSuccess={() => fetchLeads(false, true)}
-        />
-      )}
 
-      {showDailyReport && (
+          lead={leadToAssign}
+          open={!!leadToAssign}
+          onClose={() => setLeadToAssign(null)}
+          onSuccess={(updatedLead) => {
+            applyLocalAssignment(updatedLead);
+            // Gentle refresh in background to keep parity with sheet
+            void syncData(false);
+          }}
+          consultants={consultants}
+        />
+      )}
+  
+      {showDailyReport && leads.length > 0 && !error && (
         <DailyReportDialog
           open={showDailyReport}
           onClose={() => setShowDailyReport(false)}
@@ -593,7 +647,7 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
       )}
     </div>
     </PullToRefresh>
-  );
+  );
 };
 
 export default AdminDashboard;

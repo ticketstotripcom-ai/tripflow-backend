@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SheetLead } from "@/lib/googleSheets";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 interface StatusDistributionChartProps {
   leads: SheetLead[];
@@ -38,21 +38,16 @@ const StatusDistributionChart = ({ leads }: StatusDistributionChartProps) => {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-              outerRadius={80}
-              fill="hsl(var(--primary))"
-              dataKey="value"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis 
+              dataKey="name" 
+              tick={{ fontSize: 12 }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+            />
+            <YAxis tick={{ fontSize: 12 }} />
             <Tooltip 
               contentStyle={{ 
                 backgroundColor: 'hsl(var(--card))', 
@@ -60,11 +55,13 @@ const StatusDistributionChart = ({ leads }: StatusDistributionChartProps) => {
                 borderRadius: '8px'
               }}
             />
-            <Legend 
-              wrapperStyle={{ fontSize: '12px' }}
-              iconType="circle"
+            <Legend />
+            <Bar 
+              dataKey="value" 
+              fill="hsl(var(--primary))"
+              radius={[4, 4, 0, 0]}
             />
-          </PieChart>
+          </BarChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

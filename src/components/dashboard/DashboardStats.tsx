@@ -133,7 +133,10 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
   ];
 
   const handleCardClick = (category: StatCategory) => {
-    setSelectedCategory(category);
+    const stat = topStats.find(s => s.category === category);
+    if (stat && stat.leads.length > 0) {
+      setSelectedCategory(category);
+    }
   };
 
   const selectedStat = topStats.find(s => s.category === selectedCategory);
@@ -147,8 +150,14 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
             return (
               <Card 
                 key={stat.title} 
-                className="hover:shadow-lg transition-all duration-300 animate-fade-in cursor-pointer hover:scale-105 active:scale-95"
+                className={`transition-all duration-300 animate-fade-in ${
+                  stat.leads.length > 0 
+                    ? 'cursor-pointer hover:shadow-lg hover:scale-105 active:scale-95' 
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
                 onClick={() => handleCardClick(stat.category)}
+                aria-disabled={stat.leads.length === 0}
+                tabIndex={stat.leads.length === 0 ? -1 : 0}
               >
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
@@ -166,7 +175,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    Click to view details →
+                    {stat.leads.length > 0 ? 'Click to view details →' : 'No leads to display'}
                   </p>
                 </CardContent>
               </Card>
@@ -200,7 +209,7 @@ const DashboardStats = ({ leads }: DashboardStatsProps) => {
 
       {selectedStat && selectedCategory !== 'hot' && selectedCategory !== 'upcomingTrips' && (
         <LeadDetailDialog
-          open={!!selectedCategory}
+          open={!!selectedCategory && selectedStat.leads.length > 0}
           onClose={() => setSelectedCategory(null)}
           title={selectedStat.title}
           leads={selectedStat.leads}

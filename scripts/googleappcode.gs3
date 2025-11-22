@@ -1,0 +1,22 @@
+function doGet(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('AppData');
+    if (!sheet) throw new Error('AppData sheet not found');
+    var data = sheet.getDataRange().getValues();
+    if (!data || data.length === 0) data = [];
+    var headers = data.shift() || [];
+    var json = data.map(function (r) {
+      var obj = {};
+      headers.forEach(function (h, i) { obj[String(h || '')] = r[i]; });
+      return obj;
+    });
+    return ContentService
+      .createTextOutput(JSON.stringify(json))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+

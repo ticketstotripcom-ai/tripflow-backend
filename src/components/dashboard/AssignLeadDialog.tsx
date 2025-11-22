@@ -19,13 +19,16 @@ import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { UserCheck } from "lucide-react";
 import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
+import { stateManager } from "@/lib/stateManager";
+import { db } from "@/services/db";
+import { createNotification } from "@/services/notificationService";
 
 interface AssignLeadDialogProps {
   open: boolean;
   onClose: () => void;
   lead: SheetLead;
   consultants: string[];
-  onSuccess: () => void;
+  onSuccess?: (updatedLead: SheetLead) => void;
 }
 
 const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: AssignLeadDialogProps) => {
@@ -62,6 +65,41 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
 
     setAssigning(true);
     try {
+      const applyLocalPersistence = async (updatedLead: SheetLead) => {
+        try {
+          // Update cached leads persisted in stateManager for immediate UX
+          const { leads: cachedLeads } = stateManager.getCachedLeads();
+          if (cachedLeads?.length) {
+            const next = cachedLeads.map((l) =>
+              (l.tripId === updatedLead.tripId && l.travellerName === updatedLead.travellerName) ||
+              (!l.tripId && l.travellerName === updatedLead.travellerName)
+                ? { ...l, consultant: updatedLead.consultant }
+                : l
+            );
+            stateManager.setCachedLeads(next);
+          }
+        } catch (err) {
+          console.warn("[AssignLeadDialog] Failed to persist cached leads:", err);
+        }
+
+        try {
+          // Update offline Dexie cache so list shows new assignment before refetch
+          const cached = await db.leads.toArray();
+          const match = cached.find(
+            (l: any) =>
+              (l.tripId && l.tripId === updatedLead.tripId) ||
+              (l.travellerName || "").toLowerCase() === (updatedLead.travellerName || "").toLowerCase()
+          );
+          if (match?.id !== undefined) {
+            await db.leads.update(match.id, { ...(match as any), consultant: updatedLead.consultant });
+          } else {
+            await db.leads.add(updatedLead as any);
+          }
+        } catch (err) {
+          console.warn("[AssignLeadDialog] Failed to persist Dexie cache:", err);
+        }
+      };
+
       const credentials = await secureStorage.getCredentials();
       if (!credentials) {
         throw new Error('Google Sheets not configured');
@@ -93,8 +131,29 @@ const AssignLeadDialog = ({ open, onClose, lead, consultants, onSuccess }: Assig
           : `Lead assigned to ${selectedConsultant}`,
       });
 
-      // Ensure dashboard reloads from source rather than cache
-      onSuccess();
+      const updatedLead: SheetLead = { ...lead, consultant: selectedConsultant };
+      const consultantEmail = selectedConsultant.toLowerCase();
+      try {
+        await createNotification({
+          sourceSheet: "Leads",
+          title: "New Lead Assigned",
+          message: `You have been assigned a new lead: ${lead.travellerName}.`,
+          roleTarget: "consultant",
+          userEmail: consultantEmail,
+          route: lead.tripId ? `/lead/${lead.tripId}` : "/dashboard",
+          targetTravellerName: lead.travellerName,
+          targetTripId: lead.tripId,
+          targetDateTime: lead.dateAndTime,
+          type: "heads-up",
+          priority: "high",
+        });
+      } catch (err) {
+        console.warn("[AssignLeadDialog] Failed to create assignment notification", err);
+      }
+      await applyLocalPersistence(updatedLead);
+
+      // Ensure dashboard reloads and dialog closes after optimistic local update
+      onSuccess?.(updatedLead);
       onClose();
     } catch (error: any) {
       console.error('Error assigning lead:', error);

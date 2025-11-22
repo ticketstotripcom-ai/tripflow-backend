@@ -8,19 +8,18 @@ import Blackboard from "@/components/Blackboard";
 import { authService } from "@/lib/authService";
 import { themeService } from "@/lib/themeService";
 import { Moon, Sun } from "lucide-react";
-import NotificationBell from "@/components/NotificationBell";
 import AppHeader from "@/components/AppHeader";
+import { stateManager } from "@/lib/stateManager";
+import { useNotificationsContext } from "@/context/NotificationContext";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, message: "" };
   }
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, message: error?.message || "Unknown error" };
-  }
   componentDidCatch(error: any) {
     console.error("Dashboard error:", error);
+    this.setState({ hasError: true, message: error?.message || "Unknown error" });
   }
   render() {
     if (this.state.hasError) {
@@ -37,8 +36,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 const Dashboard = () => {
   const [session, setSession] = useState(authService.getSession());
   const [theme, setTheme] = useState(themeService.getTheme());
+  const [swipeEnabled, setSwipeEnabled] = useState(stateManager.getSwipeEnabled());
   const navigate = useNavigate();
   const location = useLocation();
+  const { unreadCount, markAllAsRead } = useNotificationsContext();
+  // WS notifications managed globally; NotificationBell handles its own count
   const viewParam = new URLSearchParams(location.search).get('view');
   const isAnalyticsOnly = viewParam === 'analytics';
 
@@ -76,6 +78,14 @@ const Dashboard = () => {
     setTheme(newTheme);
   };
 
+  const handleToggleSwipe = () => {
+    setSwipeEnabled((prev) => {
+      const next = !prev;
+      stateManager.setSwipeEnabled(next);
+      return next;
+    });
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen bg-gradient-subtle pb-24 sm:pb-20 flex items-center justify-center">
@@ -90,14 +100,28 @@ const Dashboard = () => {
       <AppHeader 
         session={session as any}
         theme={theme}
+        swipeEnabled={swipeEnabled}
+        unreadCount={unreadCount}
         onToggleTheme={handleToggleTheme}
-        onSettings={session.user.role === 'admin' ? () => navigate('/settings') : undefined}
+        onToggleSwipe={handleToggleSwipe}
+        onSettings={session.user.role === 'admin' ? () => {
+          try { navigate('/settings'); } catch {}
+          try {
+            const expected = '#/settings';
+            if (typeof window !== 'undefined') {
+              if (!String(window.location.hash || '').startsWith(expected)) {
+                window.location.hash = expected;
+              }
+            }
+          } catch {}
+        } : undefined}
         onLogout={handleLogout}
+        onMarkAllAsRead={markAllAsRead}
       />
 
       <main className="w-full px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
         {isAnalyticsOnly ? (
-          session.user.role === 'admin' ? <AdminDashboard /> : <ConsultantDashboard />
+          session.user.role === 'admin' ? <AdminDashboard swipeEnabled={swipeEnabled} /> : <ConsultantDashboard swipeEnabled={swipeEnabled} />
         ) : (
           <div className="text-sm text-muted-foreground">Preparing analytics…</div>
         )}

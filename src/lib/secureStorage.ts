@@ -14,26 +14,60 @@ const CREDENTIALS_STORAGE = 'secure_credentials';
 
 // Simple encryption/decryption (in production, use stronger crypto)
 async function getEncryptionKey(): Promise<string> {
-  const { value } = await Preferences.get({ key: ENCRYPTION_KEY_STORAGE });
-  if (value) return value;
-  
-  // Generate new key
-  const newKey = btoa(Math.random().toString(36).substring(2) + Date.now().toString(36));
-  await Preferences.set({ key: ENCRYPTION_KEY_STORAGE, value: newKey });
-  return newKey;
+  try {
+    const { value } = await Preferences.get({ key: ENCRYPTION_KEY_STORAGE });
+    if (value) return value;
+    
+    // Generate new key
+    const newKey = btoa(Math.random().toString(36).substring(2) + Date.now().toString(36));
+    await Preferences.set({ key: ENCRYPTION_KEY_STORAGE, value: newKey });
+    return newKey;
+  } catch (error) {
+    console.warn("[secureStorage] Failed to get/set encryption key, using fallback:", error);
+    // Fallback to a static key if preferences fail
+    return "fallback-encryption-key-2024";
+  }
+}
+
+function toBytes(str: string): Uint8Array {
+  try { return new TextEncoder().encode(str); } catch { return Uint8Array.from(Array.from(str).map(c => c.charCodeAt(0) & 0xff)); }
+}
+
+function fromBytes(bytes: Uint8Array): string {
+  try { return new TextDecoder().decode(bytes); } catch { return String.fromCharCode(...Array.from(bytes)); }
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return btoa(binary);
+}
+
+function bytesFromBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 function simpleEncrypt(text: string, key: string): string {
-  return btoa(text.split('').map((char, i) => 
-    String.fromCharCode(char.charCodeAt(0) ^ key.charCodeAt(i % key.length))
-  ).join(''));
+  const data = toBytes(text);
+  const keyBytes = toBytes(key);
+  const out = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = data[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return base64FromBytes(out);
 }
 
 function simpleDecrypt(encrypted: string, key: string): string {
-  const decoded = atob(encrypted);
-  return decoded.split('').map((char, i) => 
-    String.fromCharCode(char.charCodeAt(0) ^ key.charCodeAt(i % key.length))
-  ).join('');
+  const enc = bytesFromBase64(encrypted);
+  const keyBytes = toBytes(key);
+  const out = new Uint8Array(enc.length);
+  for (let i = 0; i < enc.length; i++) {
+    out[i] = enc[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return fromBytes(out);
 }
 
 export interface SecureCredentials {
@@ -56,7 +90,11 @@ export const secureStorage = {
   async saveCredentials(credentials: SecureCredentials): Promise<void> {
     const key = await getEncryptionKey();
     const encrypted = simpleEncrypt(JSON.stringify(credentials), key);
-    await Preferences.set({ key: CREDENTIALS_STORAGE, value: encrypted });
+    try {
+      await Preferences.set({ key: CREDENTIALS_STORAGE, value: encrypted });
+    } catch (e) {
+      console.warn('secureStorage: failed to save credentials (non-fatal):', e);
+    }
 
     if (credentials.googleServiceAccountJson) {
       await persistServiceAccountJson(credentials.googleServiceAccountJson);
@@ -144,7 +182,11 @@ export const secureStorage = {
   async set(key: string, value: string): Promise<void> {
     const encKey = await getEncryptionKey();
     const encrypted = simpleEncrypt(value, encKey);
-    await Preferences.set({ key, value: encrypted });
+    try {
+      await Preferences.set({ key, value: encrypted });
+    } catch (e) {
+      console.warn(`secureStorage: failed to persist key ${key} (non-fatal)`, e);
+    }
   },
 
   async get(key: string): Promise<string | null> {

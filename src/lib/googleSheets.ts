@@ -60,6 +60,7 @@ export interface SheetLead {
   travellerName: string;
   travelDate: string;
   travelState: string;
+  destination?: string;
   remarks: string;
   nights: string;
   pax: string;
@@ -75,6 +76,21 @@ export interface SheetLead {
 }
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
+const OFFLINE_ERROR_SNIPPETS = [
+  'failed to fetch',
+  'networkerror',
+  'network request failed',
+  'offline',
+];
+
+function isLikelyOfflineError(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (!message) return error instanceof TypeError;
+  const normalized = message.toLowerCase();
+  return OFFLINE_ERROR_SNIPPETS.some((snippet) => normalized.includes(snippet));
+}
 
 // Optional safe fallback for Node-style Google client usage
 export function getAuthorizedClient(serviceAccountJson: ServiceAccountJson) {
@@ -215,6 +231,78 @@ export class GoogleSheetsService {
     return index - 1;
   }
 
+  private indexToColumn(index: number): string {
+    let col = "";
+    let n = index + 1;
+    while (n > 0) {
+      const rem = (n - 1) % 26;
+      col = String.fromCharCode(65 + rem) + col;
+      n = Math.floor((n - 1) / 26);
+    }
+    return col;
+  }
+
+  /** Simple wrapper to read rows from a worksheet. If a range like 'A2:K10000' is provided, it is used as-is. */
+  async getRows(sheetName: string, range?: string): Promise<(string | number | null)[][]> {
+    const worksheetName = this.normalizeSheetName(sheetName);
+    const r = range ? `${worksheetName}!${range}` : `${worksheetName}`;
+    let url: string;
+    const headers: Record<string, string> = {};
+    if (this.config.serviceAccountJson) {
+      const sa = this.getParsedServiceAccount();
+      if (!sa || !sa.private_key) throw new Error('Service account JSON invalid or missing');
+      const token = await this.getAccessToken();
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(r)}`;
+      headers['Authorization'] = `Bearer ${token}`;
+    } else if (this.config.apiKey) {
+      url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(r)}?key=${this.config.apiKey}`;
+    } else {
+      throw new Error('Missing credentials: provide Service Account JSON or API Key');
+    }
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`Failed to fetch rows: ${response.statusText}`);
+    const data = await response.json();
+    const values: (string | number | null)[][] = data.values || [];
+    // If no explicit range was provided, slice header
+    return range ? values : (values.length > 1 ? values.slice(1) : []);
+  }
+
+  /** Append a row to a worksheet. Requires Service Account JSON. */
+  async appendRow(sheetName: string, row: (string | number | null)[]): Promise<void> {
+    if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required to append rows');
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) throw new Error('Service account JSON invalid or missing');
+    const worksheetName = this.normalizeSheetName(sheetName);
+    const token = await this.getAccessToken();
+    const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(worksheetName)}:append?valueInputOption=USER_ENTERED`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: [row] }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  /** Batch update individual cells by zero-based column index and 1-based row number. */
+  async batchUpdateCells(sheetName: string, updates: { row: number; column: number; value: string | number | boolean }[]): Promise<void> {
+    if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required to update cells');
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) throw new Error('Service account JSON invalid or missing');
+    const token = await this.getAccessToken();
+    const worksheetName = this.normalizeSheetName(sheetName);
+    const data = updates.map((u) => ({
+      range: `${worksheetName}!${this.indexToColumn(u.column)}${u.row}`,
+      values: [[u.value]],
+    }));
+    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+    const res = await fetch(batchUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
   public clearLeadsCache(): void {
     this.leadsCache = null;
     console.log('🗑️ Leads cache cleared');
@@ -319,7 +407,7 @@ export class GoogleSheetsService {
    * ✅ FIXED: Fetch leads with ACTUAL row numbers
    * Now fetches ALL rows including empty ones to preserve row numbering
    */
-  async fetchLeads(forceRefresh = false): Promise<SheetLead[]> {
+  async fetchLeads(forceRefresh = false, signal?: AbortSignal): Promise<SheetLead[]> {
     if (!forceRefresh && this.leadsCache && Date.now() - this.leadsCache.timestamp < this.CACHE_TTL) {
       console.log('✅ Returning cached leads');
       return this.leadsCache.data;
@@ -438,6 +526,7 @@ export class GoogleSheetsService {
           travellerName: String(travellerName),
           travelDate: String(row[this.columnToIndex(cm.travelDate || 'G')] || ''),
           travelState: String(row[this.columnToIndex(cm.travelState || 'H')] || ''),
+          destination: String(row[this.columnToIndex(cm.destination || 'I')] || ''),
           remarks: String(row[this.columnToIndex(cm.remarks || 'K')] || ''),
           nights: String(row[this.columnToIndex(cm.nights || 'L')] || ''),
           pax: String(row[this.columnToIndex(cm.pax || 'M')] || ''),
@@ -477,62 +566,125 @@ export class GoogleSheetsService {
 
   /** Append new lead */
   async appendLead(lead: Partial<SheetLead>): Promise<void> {
-    if (!navigator.onLine) {
+    const queueOffline = async () => {
       await enqueue({ type: 'appendLead', config: this.config, lead });
-      console.log('📥 Offline: queued appendLead for later sync');
-      return;
-    }
-    const worksheetName = this.normalizeSheetName(this.config.worksheetNames[0] || 'MASTER DATA');
-    const range = `${worksheetName}`;
-    console.log(`✅ Appending to sheet: ${worksheetName}`);
-    console.log('✅ Using Service Account for Sheets write operation');
-    const sa = this.getParsedServiceAccount();
-    if (!sa || !sa.private_key) {
-      console.error('❌ Missing or invalid service account JSON');
-      throw new Error('Service account JSON invalid or missing');
-    }
-    console.log('✅ Using valid service account credentials');
-    const token = await this.getAccessToken();
-    const cm = this.config.columnMappings;
+      console.log('Offline: queued appendLead for later sync');
+    };
 
-    const row: (string | number | null)[] = [];
-    const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
-
-    for (let i = 0; i <= maxCol; i++) row[i] = '';
-
-    for (const [key, col] of Object.entries(cm)) {
-      if (!col) continue;
-      const idx = this.columnToIndex(col);
-      if (key in lead && lead[key as keyof SheetLead] !== undefined) {
-        let value = lead[key as keyof SheetLead];
-        if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
-          value = formatSheetDate(value);
-        }
-        row[idx] = Array.isArray(value) ? value.join('; ') : value;
+    try {
+      const worksheetName = this.normalizeSheetName(this.config.worksheetNames[0] || 'MASTER DATA');
+      const range = `${worksheetName}`;
+      console.log(`Appending to sheet: ${worksheetName}`);
+      console.log('Using Service Account for Sheets write operation');
+      const sa = this.getParsedServiceAccount();
+      if (!sa || !sa.private_key) {
+        console.error('??O Missing or invalid service account JSON');
+        throw new Error('Service account JSON invalid or missing');
       }
+      console.log('Using valid service account credentials');
+      const token = await this.getAccessToken();
+      const cm = this.config.columnMappings;
+
+      const row: (string | number | null)[] = [];
+      const maxCol = Math.max(...Object.values(cm).map((c) => this.columnToIndex(c)));
+
+      for (let i = 0; i <= maxCol; i++) row[i] = '';
+
+      for (const [key, col] of Object.entries(cm)) {
+        if (!col) continue;
+        const idx = this.columnToIndex(col);
+        if (key in lead && lead[key as keyof SheetLead] !== undefined) {
+          let value = lead[key as keyof SheetLead];
+          if ((key === 'travelDate' || key === 'dateAndTime' || key === 'date') && typeof value === 'string') {
+            value = formatSheetDate(value);
+          }
+          row[idx] = Array.isArray(value) ? value.join('; ') : value;
+        }
+      }
+
+      // Explicit logging for critical fields
+      console.log('dY+ Appending lead with fields:', {
+        travellerName: lead.travellerName,
+        travelDate: lead.travelDate,
+        travelState: lead.travelState,
+      });
+
+      const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ values: [row] }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      console.log('Lead appended');
+      
+      this.clearLeadsCache();
+    } catch (error) {
+      if (isLikelyOfflineError(error)) {
+        await queueOffline();
+        return;
+      }
+      throw error;
     }
-
-    // Explicit logging for critical fields
-    console.log('🆕 Appending lead with fields:', {
-      travellerName: lead.travellerName,
-      travelDate: lead.travelDate,
-      travelState: lead.travelState,
-    });
-
-    const url = `${SHEETS_API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ values: [row] }),
-    });
-
-    if (!res.ok) throw new Error(await res.text());
-    console.log('✅ Lead appended');
-    
-    this.clearLeadsCache();
   }
 
   // Date parsing/formatting is provided by dateUtils
+
+  /** Update cell notes using the batchUpdate API */
+  async updateCellNotes(sheetName: string, updates: { row: number; column: number; note: string }[]): Promise<void> {
+    if (!this.config.serviceAccountJson) throw new Error('Service Account JSON required to update cell notes');
+    const sa = this.getParsedServiceAccount();
+    if (!sa || !sa.private_key) throw new Error('Service account JSON invalid or missing');
+    const token = await this.getAccessToken();
+    const worksheetName = this.normalizeSheetName(sheetName);
+
+    // First, get the sheet ID from the spreadsheet
+    const sheetMetadataUrl = `${SHEETS_API_BASE}/${this.config.sheetId}?fields=sheets.properties`;
+    const metadataRes = await fetch(sheetMetadataUrl, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!metadataRes.ok) {
+      throw new Error(`Failed to fetch sheet metadata: ${await metadataRes.text()}`);
+    }
+
+    const metadata = await metadataRes.json();
+    const sheet = metadata.sheets.find((s: any) => s.properties.title === worksheetName);
+    
+    if (!sheet) {
+      throw new Error(`Sheet "${worksheetName}" not found`);
+    }
+
+    const sheetId = sheet.properties.sheetId;
+
+    const requests = updates.map((u) => ({
+      updateCells: {
+        range: {
+          sheetId: sheetId,
+          startRowIndex: u.row - 1, // 0-based index
+          endRowIndex: u.row,
+          startColumnIndex: u.column, // 0-based index
+          endColumnIndex: u.column + 1,
+        },
+        rows: [{
+          values: [{
+            note: u.note
+          }]
+        }],
+        fields: 'note'
+      }
+    }));
+
+    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}:batchUpdate`;
+    const res = await fetch(batchUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ requests }),
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+  }
 
   /** Update a lead by (date+traveller) using stored row number */
   async updateLead(
@@ -545,125 +697,160 @@ export class GoogleSheetsService {
       throw new Error('Date + Traveller Name required to update lead');
     }
 
-    if (!navigator.onLine) {
+    const queueOffline = async () => {
       await enqueue({ type: 'updateLead', config: this.config, identity, updates });
-      console.log('📥 Offline: queued updateLead for later sync');
-      return;
-    }
+      console.log('Offline: queued updateLead for later sync');
+    };
 
-    const leads = await this.fetchLeads();
+    const performUpdate = async () => {
+      const leads = await this.fetchLeads();
 
-    const targetDate = parseFlexibleDateUtil(dateAndTime);
+      const targetDate = parseFlexibleDateUtil(dateAndTime);
 
-    const sameDay = (d1: Date | null, d2: Date | null) =>
-      !!d1 &&
-      !!d2 &&
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate();
+      const sameDay = (d1: Date | null, d2: Date | null) =>
+        !!d1 &&
+        !!d2 &&
+        d1.getFullYear() === d2.getFullYear() &&
+        d1.getMonth() === d2.getMonth() &&
+        d1.getDate() === d2.getDate();
 
-    const matchedLead = leads.find((l) => {
-      const ld = parseFlexibleDateUtil(l.dateAndTime);
-      const dateMatch =
-        sameDay(targetDate, ld) ||
-        String(l.dateAndTime).trim() === String(dateAndTime).trim();
-      const nameMatch =
-        String(l.travellerName).trim().toLowerCase() ===
-        String(travellerName).trim().toLowerCase();
-      return dateMatch && nameMatch;
-    });
-
-    if (!matchedLead) {
-      console.error('❌ Lead not found. Search criteria:', { dateAndTime, travellerName });
-      console.error(
-        '📋 Available leads sample:',
-        leads.slice(0, 3).map((l) => ({
-          date: l.dateAndTime,
-          name: l.travellerName,
-          row: l._rowNumber,
-        }))
-      );
-      throw new Error(
-        `Lead not found for Date: "${dateAndTime}" and Traveller: "${travellerName}"`
-      );
-    }
-
-    if (!matchedLead._rowNumber || matchedLead._rowNumber < 2) {
-      throw new Error('Invalid row number detected. Please refresh leads data.');
-    }
-
-    const rowNumber = matchedLead._rowNumber;
-
-    console.log(`🎯 Updating lead:`, {
-      date: dateAndTime,
-      traveller: travellerName,
-      actualSheetRow: rowNumber,
-      updates: Object.keys(updates),
-    });
-
-    const cm = this.config.columnMappings;
-    console.log('✅ Using Service Account for Sheets write operation');
-    const sa = this.getParsedServiceAccount();
-    if (!sa || !sa.private_key) {
-      console.error('❌ Missing or invalid service account JSON');
-      throw new Error('Service account JSON invalid or missing');
-    }
-    console.log('✅ Using valid service account credentials');
-    const token = await this.getAccessToken();
-
-    const updateData: { range: string; values: (string | number | null)[][] }[] = [];
-
-    for (const [key, rawValue] of Object.entries(updates)) {
-      if (
-        rawValue === undefined ||
-        ['tripId', 'dateAndTime', 'notes', '_rowNumber'].includes(key)
-      ) {
-        continue;
-      }
-
-      const col = cm[key as keyof typeof cm];
-      if (!col) continue;
-
-      let value: string | number | null = rawValue as any;
-
-      if (
-        (key === 'travelDate' || key === 'dateAndTime' || key === 'date') &&
-        typeof value === 'string'
-      ) {
-        value = formatSheetDate(value);
-      }
-
-      const cellRange = `${this.normalizeSheetName(
-        this.config.worksheetNames[0]
-      )}!${col}${rowNumber}`;
-      updateData.push({
-        range: cellRange,
-        values: [[value]],
+      const matchedLead = leads.find((l) => {
+        const ld = parseFlexibleDateUtil(l.dateAndTime);
+        const dateMatch =
+          sameDay(targetDate, ld) ||
+          String(l.dateAndTime).trim() === String(dateAndTime).trim();
+        const nameMatch =
+          String(l.travellerName).trim().toLowerCase() ===
+          String(travellerName).trim().toLowerCase();
+        return dateMatch && nameMatch;
       });
 
-      console.log(`  📝 Updating ${cellRange} = "${value}"`);
+      if (!matchedLead) {
+        console.error('??O Lead not found. Search criteria:', { dateAndTime, travellerName });
+        console.error(
+          'dY"< Available leads sample:',
+          leads.slice(0, 3).map((l) => ({
+            date: l.dateAndTime,
+            name: l.travellerName,
+            row: l._rowNumber,
+          }))
+        );
+        throw new Error(
+          `Lead not found for Date: "${dateAndTime}" and Traveller: "${travellerName}"`
+        );
+      }
+
+      if (!matchedLead._rowNumber || matchedLead._rowNumber < 2) {
+        throw new Error('Invalid row number detected. Please refresh leads data.');
+      }
+
+      const rowNumber = matchedLead._rowNumber;
+
+      console.log(`dYZ_ Updating lead:`, {
+        date: dateAndTime,
+        traveller: travellerName,
+        actualSheetRow: rowNumber,
+        updates: Object.keys(updates),
+      });
+
+      const cm = this.config.columnMappings;
+      console.log('Using Service Account for Sheets write operation');
+      const sa = this.getParsedServiceAccount();
+      if (!sa || !sa.private_key) {
+        console.error('??O Missing or invalid service account JSON');
+        throw new Error('Service account JSON invalid or missing');
+      }
+      console.log('Using valid service account credentials');
+      const token = await this.getAccessToken();
+
+      const updateData: { range: string; values: (string | number | null)[][] }[] = [];
+      let notesUpdate: { row: number; column: number; note: string } | null = null;
+
+      for (const [key, rawValue] of Object.entries(updates)) {
+        if (
+          rawValue === undefined ||
+          ['tripId', 'dateAndTime', '_rowNumber'].includes(key)
+        ) {
+          continue;
+        }
+
+        // Handle notes separately using cell notes API
+        if (key === 'notes') {
+          const remarksCol = cm['remarks'];
+          if (remarksCol && rawValue) {
+            notesUpdate = {
+              row: rowNumber,
+              column: this.columnToIndex(remarksCol),
+              note: String(rawValue)
+            };
+          }
+          continue;
+        }
+
+        const col = cm[key as keyof typeof cm];
+        if (!col) continue;
+
+        let value: string | number | null = rawValue as any;
+
+        if (
+          (key === 'travelDate' || key === 'dateAndTime' || key === 'date') &&
+          typeof value === 'string'
+        ) {
+          value = formatSheetDate(value);
+        }
+
+        const cellRange = `${this.normalizeSheetName(
+          this.config.worksheetNames[0]
+        )}!${col}${rowNumber}`;
+        updateData.push({
+          range: cellRange,
+          values: [[value]],
+        });
+
+        console.log(`Updating ${cellRange} = "${value}"`);
+      }
+
+      if (updateData.length === 0 && !notesUpdate) {
+        console.log('No fields to update');
+        return;
+      }
+
+      // Update cell values first
+      if (updateData.length > 0) {
+        const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
+        const res = await fetch(batchUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error('??O Failed to update lead in Google Sheets:', errText);
+          throw new Error(errText);
+        }
+      }
+
+      // Update cell notes if needed
+      if (notesUpdate) {
+        await this.updateCellNotes(this.config.worksheetNames[0], [notesUpdate]);
+        console.log(`Updated cell note at row ${notesUpdate.row}, column ${notesUpdate.column}`);
+      }
+
+      console.log(`Lead updated successfully at row ${rowNumber}`);
+
+      this.clearLeadsCache();
+    };
+
+    try {
+      await performUpdate();
+    } catch (error) {
+      if (isLikelyOfflineError(error)) {
+        await queueOffline();
+        return;
+      }
+      throw error;
     }
-
-    if (updateData.length === 0) {
-      console.log('⚠️ No fields to update');
-      return;
-    }
-
-    const batchUrl = `${SHEETS_API_BASE}/${this.config.sheetId}/values:batchUpdate`;
-    const res = await fetch(batchUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updateData }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('❌ Failed to update lead in Google Sheets:', errText);
-      throw new Error(errText);
-    }
-
-    console.log(`✅ Lead updated successfully at row ${rowNumber}`);
-
-    this.clearLeadsCache();
   }
+
 }

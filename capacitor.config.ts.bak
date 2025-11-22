@@ -1,0 +1,39 @@
+import type { CapacitorConfig } from '@capacitor/core';
+
+const config: CapacitorConfig = {
+  appId: 'com.tripflow.app',
+  appName: 'TTT CRM',
+  webDir: 'dist',
+  bundledWebRuntime: false,
+  server: {
+    cleartext: true,
+    androidScheme: 'https',
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 0,
+      backgroundColor: '#ffffff',
+      showSpinner: false,
+      androidScaleType: 'CENTER_CROP',
+      splashFullScreen: false,
+      splashImmersive: false,
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_notification',
+      iconColor: '#000000',
+    },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
+  android: {
+    buildOptions: {
+      keystorePath: 'keystore.jks',
+      keystorePassword: 'password',
+      keystoreAlias: 'key0',
+      keystoreAliasPassword: 'password',
+    },
+  },
+};
+
+export default config;

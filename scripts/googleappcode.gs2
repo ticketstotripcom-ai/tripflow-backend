@@ -1,0 +1,30 @@
+function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Notifications');
+    if (!sheet) throw new Error('Notifications sheet not found');
+    var body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    var row = [body.id || new Date().getTime(), body.title || '', body.message || '', new Date(), body.type || '', body.user || '', body.read || false];
+    sheet.appendRow(row);
+    var out = ContentService.createTextOutput(JSON.stringify({ success: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+    return addCorsHeaders(out);
+  } catch (err) {
+    var errorOut = ContentService.createTextOutput(JSON.stringify({ success: false, error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+    return addCorsHeaders(errorOut);
+  }
+}
+
+function doOptions(e) {
+  var out = ContentService.createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT);
+  return addCorsHeaders(out);
+}
+
+function addCorsHeaders(response) {
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  return response;
+}
+

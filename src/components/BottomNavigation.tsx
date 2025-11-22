@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, LayoutDashboard } from "lucide-react";
 import { stateManager } from "@/lib/stateManager";
@@ -11,6 +12,11 @@ interface BottomNavigationProps {
 const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    console.log('[BottomNavigation] mounted at route:', location.pathname + (location.search || ''));
+    return () => console.log('[BottomNavigation] unmounted');
+  }, []);
 
   const handleBack = () => {
     emitGlobalPopupClose();
@@ -54,7 +60,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t shadow-elegant z-[120]">
+    <div className="bottom-nav bg-card/80 backdrop-blur-md shadow-soft" role="navigation" aria-label="Bottom navigation">
       <div className="container mx-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0)+0.75rem)]">
         <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto justify-items-center">
           <Button

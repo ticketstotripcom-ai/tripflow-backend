@@ -17,7 +17,7 @@ const DEFAULT_SERVICE_ACCOUNT_JSON = `{
 
 function loadBundledServiceAccountJson(): string | null {
   try {
-    const matches = import.meta.glob('./serviceAccount*.json', { eager: true, as: 'raw' });
+    const matches = import.meta.glob('./serviceAccount*.json', { eager: true, query: '?raw', import: 'default' });
     for (const raw of Object.values(matches)) {
       if (typeof raw === 'string') {
         const sanitized = raw.trim();

@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
+import { Capacitor } from '@capacitor/core';
+import { scheduleLocalAt } from '@/lib/nativeNotifications';
 import { useToast } from "@/hooks/use-toast";
 import { Bell } from "lucide-react";
 import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
@@ -57,22 +59,23 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
 
     if (delay > 0 && delay < 2147483647) { // Max setTimeout delay
       setTimeout(() => {
-        // Show notification
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Lead Reminder', {
-            body: `${leadName} - ${message || 'Follow up required'}`,
-            icon: '/favicon.ico',
-          });
-        }
-        
-        // Play sound
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDmH0fPTgjMGHm7A7+OZSA==');
-        audio.play().catch(() => {});
-        
-        toast({
-          title: "Reminder",
-          description: `${leadName} - ${message || 'Follow up required'}`,
-        });
+        try {
+          const platform = Capacitor.getPlatform();
+          if (platform === 'web') {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              new Notification('Lead Reminder', {
+                body: `${leadName} - ${message || 'Follow up required'}`,
+                icon: '/favicon.ico',
+              });
+            }
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDmH0fPTgjMGHm7A7+OZSA==');
+            audio.play().catch(() => {});
+          } else {
+            // Native local notification
+            scheduleLocalAt(new Date(reminderTime), 'Lead Reminder', `${leadName} - ${message || 'Follow up required'}`);
+          }
+        } catch {}
+        toast({ title: 'Reminder', description: `${leadName} - ${message || 'Follow up required'}` });
       }, delay);
     }
 
@@ -86,9 +89,14 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
 
   // Request notification permission
   const requestNotificationPermission = () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    try {
+      const platform = Capacitor.getPlatform();
+      if (platform === 'web') {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+      }
+    } catch {}
   };
 
   return (

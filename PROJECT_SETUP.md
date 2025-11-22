@@ -148,7 +148,7 @@ Since this project has no hardcoded secrets:
 ```11:18:capacitor.config.ts
 const config: CapacitorConfig = {
   appId: 'com.tripflow.app',
-  appName: 'TripFlow CRM',
+  appName: 'TTT CRM',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

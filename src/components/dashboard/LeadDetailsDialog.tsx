@@ -193,97 +193,98 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Lead Details - {lead.travellerName}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+      <DialogContent className="grid grid-rows-[auto_1fr_auto] max-h-[85vh] p-0">
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
+          <DialogTitle>Lead Details - {lead.travellerName}</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-y-auto flex-1">
+          <div className="space-y-4 p-6 pb-20">
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Trip ID</Label>
-              <Input value={formData.tripId} readOnly className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input value={formData.dateAndTime} readOnly className="bg-muted" />
-            </div>
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Trip ID</Label>
+                <Input value={formData.tripId} readOnly className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input value={formData.dateAndTime} readOnly className="bg-muted" />
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label>Traveller Name</Label>
-            <Input value={formData.travellerName} readOnly className="bg-muted" />
-          </div>
+            <div className="space-y-2">
+              <Label>Traveller Name</Label>
+              <Input value={formData.travellerName} readOnly className="bg-muted" />
+            </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input 
-                value={formData.phone} 
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input 
-                value={formData.email} 
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => setFormData({ ...formData, status: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LEAD_STATUSES.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => setFormData({ ...formData, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[1000]" position="popper">
+                  {LEAD_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label>Priority</Label>
-            <Select
-              value={(formData.priority || 'medium').toLowerCase()}
-              onValueChange={(value) => setFormData({ ...formData, priority: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="high">🔴 High</SelectItem>
-                <SelectItem value="medium">🟡 Medium</SelectItem>
-                <SelectItem value="low">🟢 Low</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select
+                value={(formData.priority || 'medium').toLowerCase()}
+                onValueChange={(value) => setFormData({ ...formData, priority: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[1000]" position="popper">
+                  <SelectItem value="high">🔴 High</SelectItem>
+                  <SelectItem value="medium">🟡 Medium</SelectItem>
+                  <SelectItem value="low">🟢 Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Travel Date
-                <span className="text-xs text-muted-foreground ml-2">(dd/mm/yyyy)</span>
-              </Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>
+                  Travel Date
+                  <span className="text-xs text-muted-foreground ml-2">(dd/mm/yyyy)</span>
+                </Label>
                 <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
-                  value={formData.travelDate}
-                  onChange={e => handleDateChange(e.target.value)}
-                  className={dateError ? 'border-red-500' : ''}
-                  autoComplete="off"
-                  onFocus={() => setCalendarOpen(true)}
-                />
+                  <Input
+                    type="text"
+                    placeholder="DD/MM/YYYY (e.g., 25/10/2025)"
+                    value={formData.travelDate}
+                    onChange={e => handleDateChange(e.target.value)}
+                    className={dateError ? 'border-red-500' : ''}
+                    autoComplete="off"
+                    onFocus={() => setCalendarOpen(true)}
+                  />
                   <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -295,7 +296,7 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
                         📅
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="p-0">
+                    <PopoverContent align="end" className="p-0 z-[1000]">
                       <Calendar
                         mode="single"
                         selected={parseAnyDate(formData.travelDate) || undefined}
@@ -304,147 +305,149 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
                       />
                     </PopoverContent>
                   </Popover>
-              </div>
+                </div>
                 {/* Floating calendar handled by Popover */}
-              {dateError && <p className="text-xs text-red-500">{dateError}</p>}
-              {!dateError && formData.travelDate && (
-                <p className="text-xs text-green-600">✓ {formatDisplayDate(parseAnyDate(formData.travelDate) as any)}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Travel State</Label>
-              <Input 
-                value={formData.travelState} 
-                onChange={(e) => setFormData({ ...formData, travelState: e.target.value })}
-              />
-            </div>
-          </div>
+                {dateError && <p className="text-xs text-red-500">{dateError}</p>}
+                {!dateError && formData.travelDate && (
+                  <p className="text-xs text-green-600">✓ {formatDisplayDate(parseAnyDate(formData.travelDate) as any)}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Travel State</Label>
+                <Input
+                  value={formData.travelState}
+                  onChange={(e) => setFormData({ ...formData, travelState: e.target.value })}
+                />
+              </div>
+            </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Nights</Label>
-              <Input 
-                value={formData.nights} 
-                onChange={(e) => setFormData({ ...formData, nights: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Pax</Label>
-              <Input 
-                value={formData.pax} 
-                onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Meal Plan</Label>
-              <Select
-                value={formData.mealPlan || ""}
-                onValueChange={value => setFormData({ ...formData, mealPlan: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Meal Plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MEAL_PLANS.map((plan) => (
-                    <SelectItem key={plan} value={plan}>{plan}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Nights</Label>
+                <Input
+                  value={formData.nights}
+                  onChange={(e) => setFormData({ ...formData, nights: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Pax</Label>
+                <Input
+                  value={formData.pax}
+                  onChange={(e) => setFormData({ ...formData, pax: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Meal Plan</Label>
+                <Select
+                  value={formData.mealPlan || ""}
+                  onValueChange={value => setFormData({ ...formData, mealPlan: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Meal Plan" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1000]" position="popper">
+                    {MEAL_PLANS.map((plan) => (
+                      <SelectItem key={plan} value={plan}>{plan}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label>Hotel Category</Label>
-            <Select
-              value={formData.hotelCategory}
-              onValueChange={(value) => setFormData({ ...formData, hotelCategory: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HOTEL_CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label>Hotel Category</Label>
+              <Select
+                value={formData.hotelCategory}
+                onValueChange={(value) => setFormData({ ...formData, hotelCategory: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[1000]" position="popper">
+                  {HOTEL_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label>Remarks</Label>
-            <Textarea 
-              value={formData.remarks} 
-              onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-              rows={4}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label>Remarks</Label>
+              <Textarea
+                value={formData.remarks}
+                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                rows={4}
+              />
+            </div>
 
-          {formData.notes && (
-            <div className="space-y-2">
-              <Label>Cell Notes (Column K)</Label>
-              <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
-                <p className="text-sm whitespace-pre-wrap">{formData.notes}</p>
-              </div>
-            </div>
-          )}
+            {formData.notes && (
+              <div className="space-y-2">
+                <Label>Cell Notes (Column K)</Label>
+                <div className="border rounded-lg p-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                  <p className="text-sm whitespace-pre-wrap">{formData.notes}</p>
+                </div>
+              </div>
+            )}
 
-          {!formData.notes && (
-            <div className="space-y-2">
-              <Label>Cell Notes (Column K)</Label>
-              <div className="border rounded-lg p-3 bg-muted/50 border-dashed">
-                <p className="text-sm text-muted-foreground">No notes found for this lead</p>
-              </div>
-            </div>
-          )}
+            {!formData.notes && (
+              <div className="space-y-2">
+                <Label>Cell Notes (Column K)</Label>
+                <div className="border rounded-lg p-3 bg-muted/50 border-dashed">
+                  <p className="text-sm text-muted-foreground">No notes found for this lead</p>
+                </div>
+              </div>
+            )}
 
-          {formData.remarkHistory && formData.remarkHistory.length > 0 && (
-            <div className="space-y-2">
-              <Label>Remark History</Label>
-              <div className="border rounded-lg p-3 bg-muted/50 space-y-2 max-h-40 overflow-y-auto">
-                {formData.remarkHistory.map((remark, index) => (
-                  <div key={index} className="text-sm text-muted-foreground">
-                    • {remark}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            {formData.remarkHistory && formData.remarkHistory.length > 0 && (
+              <div className="space-y-2">
+                <Label>Remark History</Label>
+                <div className="border rounded-lg p-3 bg-muted/50 space-y-2 max-h-40 overflow-y-auto">
+                  {formData.remarkHistory.map((remark, index) => (
+                    <div key={index} className="text-sm text-muted-foreground">
+                      • {remark}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-          <div className="border-t pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowReminderDialog(true)}
-              className="w-full gap-2"
-            >
-              <Bell className="h-4 w-4" />
-              Set Reminder for this Lead
-            </Button>
-          </div>
+            <div className="border-t pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowReminderDialog(true)}
+                className="w-full gap-2"
+              >
+                <Bell className="h-4 w-4" />
+                Set Reminder for this Lead
+              </Button>
+            </div>
+          </div>
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving || !!dateError}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-      {showReminderDialog && (
-        <ReminderDialog
-          open={showReminderDialog}
-          onClose={() => setShowReminderDialog(false)}
-          leadTripId={lead.tripId}
-          leadName={lead.travellerName}
-          onReminderSet={reminder => { console.log('Reminder set:', reminder); }}
-        />
-      )}
-    </Dialog>
-  );
+        <div className="flex justify-end gap-2 p-4 border-t">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !!dateError}>
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </DialogContent>
+      {showReminderDialog && (
+      <ReminderDialog
+        open={showReminderDialog}
+        onClose={() => setShowReminderDialog(false)}
+        leadTripId={lead.tripId}
+        leadName={lead.travellerName}
+        onReminderSet={reminder => { console.log('Reminder set:', reminder); }}
+      />
+    )}
+    </Dialog>
+  );
 };
 
 export default LeadDetailsDialog;
+

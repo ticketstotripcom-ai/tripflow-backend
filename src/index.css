@@ -2,10 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
+/* ========================================================================
+   DESIGN SYSTEM — ALL COLORS MUST BE HSL
+   ======================================================================== */
 @layer base {
   :root {
     --background: 220 20% 97%;
@@ -19,51 +18,66 @@ All colors MUST be HSL.
 
     --primary: 250 85% 60%;
     --primary-foreground: 0 0% 100%;
-    
     --primary-glow: 250 85% 75%;
-    --accent-glow: 280 70% 65%;
-
-    --secondary: 220 15% 95%;
-    --secondary-foreground: 220 15% 20%;
-
-    --muted: 220 15% 95%;
-    --muted-foreground: 220 10% 45%;
 
     --accent: 280 70% 55%;
     --accent-foreground: 0 0% 100%;
+    --accent-glow: 280 70% 65%;
 
-    /* Multicolor chart palette (light) */
-    --chart-1: 255 85% 62%; /* violet */
-    --chart-2: 210 90% 56%; /* blue */
-    --chart-3: 150 63% 45%; /* green */
-    --chart-4: 38 95% 55%;  /* orange */
-    --chart-5: 330 80% 60%; /* pink */
-    --chart-6: 280 70% 60%; /* purple */
-    --chart-7: 190 85% 52%; /* cyan */
-    --chart-8: 120 60% 48%; /* emerald */
+    /* GREYS */
+    --secondary: 220 15% 95%;
+    --secondary-foreground: 220 15% 20%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 45%;
 
+    /* Status */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    
     --success: 145 65% 50%;
     --warning: 38 92% 50%;
 
+    /* Charts Light */
+    --chart-1: 255 85% 62%;
+    --chart-2: 210 90% 56%;
+    --chart-3: 150 63% 45%;
+    --chart-4: 38 95% 55%;
+    --chart-5: 330 80% 60%;
+    --chart-6: 280 70% 60%;
+    --chart-7: 190 85% 52%;
+    --chart-8: 120 60% 48%;
+
+    /* Borders & Forms */
     --border: 220 15% 88%;
     --input: 220 15% 88%;
     --ring: 250 85% 60%;
 
+    /* Radius */
     --radius: 0.75rem;
-    
+
+    /* Shadows & Gradients */
+    --shadow-soft: 0 4px 20px -2px hsl(250 85% 60% / 0.1);
+    --shadow-glow: 0 0 30px hsl(250 85% 75% / 0.3);
+
     --gradient-primary: linear-gradient(135deg, hsl(250 85% 60%), hsl(280 70% 55%));
     --gradient-accent: linear-gradient(135deg, hsl(280 70% 55%), hsl(310 65% 60%));
     --gradient-subtle: linear-gradient(180deg, hsl(220 20% 99%), hsl(220 20% 97%));
-    
-    --shadow-soft: 0 4px 20px -2px hsl(250 85% 60% / 0.1);
-    --shadow-glow: 0 0 30px hsl(250 85% 75% / 0.3);
-    
+
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Global UI sizing */
+    --bottom-nav-height: 50px;
+
+    /* Background engine variables */
+    --tilt-x: 0deg;
+    --tilt-y: 0deg;
+    --mouse-x: 0px;
+    --mouse-y: 0px;
+    --scroll-parallax: 0px;
   }
 
+  /* ========================================================================
+      DARK MODE
+     ======================================================================== */
   .dark {
     --background: 220 25% 8%;
     --foreground: 220 10% 95%;
@@ -76,20 +90,22 @@ All colors MUST be HSL.
 
     --primary: 250 85% 65%;
     --primary-foreground: 0 0% 100%;
-    
     --primary-glow: 250 85% 75%;
+
+    --accent: 280 70% 60%;
+    --accent-foreground: 0 0% 100%;
     --accent-glow: 280 70% 65%;
 
     --secondary: 220 20% 18%;
     --secondary-foreground: 220 10% 90%;
-
     --muted: 220 20% 18%;
     --muted-foreground: 220 10% 60%;
 
-    --accent: 280 70% 60%;
-    --accent-foreground: 0 0% 100%;
+    --border: 220 20% 20%;
+    --input: 220 20% 20%;
+    --ring: 250 85% 65%;
 
-    /* Multicolor chart palette (dark) */
+    /* Charts Dark */
     --chart-1: 255 85% 70%;
     --chart-2: 210 90% 65%;
     --chart-3: 150 63% 55%;
@@ -99,74 +115,442 @@ All colors MUST be HSL.
     --chart-7: 190 85% 60%;
     --chart-8: 120 60% 58%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    
-    --success: 145 65% 50%;
-    --warning: 38 92% 50%;
-
-    --border: 220 20% 20%;
-    --input: 220 20% 20%;
-    --ring: 250 85% 65%;
-    
     --gradient-primary: linear-gradient(135deg, hsl(250 85% 65%), hsl(280 70% 60%));
     --gradient-accent: linear-gradient(135deg, hsl(280 70% 60%), hsl(310 65% 65%));
     --gradient-subtle: linear-gradient(180deg, hsl(220 25% 10%), hsl(220 25% 8%));
-    
+
     --shadow-soft: 0 4px 20px -2px hsl(250 85% 60% / 0.2);
     --shadow-glow: 0 0 30px hsl(250 85% 75% / 0.4);
   }
 }
 
+/* ========================================================================
+   NOTIFICATION PANEL
+   ======================================================================== */
+.notification-panel {
+  max-height: 80vh;
+  overflow-y: auto;
+  position: fixed;
+  right: 1rem;
+  top: 4rem;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  z-index: 9999;
+}
+
+/* ========================================================================
+   BOTTOM NAV – mobile safe-area behavior
+   ======================================================================== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  padding: 0.5rem 0;
+  background: hsl(var(--card));
+  border-top: 1px solid #eee;
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom);
+  min-height: var(--bottom-nav-height);
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  will-change: transform;
+}
+
+body {
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0));
+}
+
+.h-screen, .min-h-screen {
+  height: calc(100vh - calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0)));
+  min-height: calc(100vh - calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0)));
+}
+
+[data-radix-dialog-overlay] { z-index: 90; }
+[data-radix-dialog-content] { z-index: 100; }
+
+/* Fix for dropdowns in dialogs */
+[data-radix-select-content] {
+  z-index: 9999 !important;
+}
+
+/* Ensure dropdowns are not clipped by dialog overflow */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+/* ========================================================================
+   BASE TEXT + INPUT FIXES
+   ======================================================================== */
 @layer base {
-  * {
-    @apply border-border;
+  * { @apply border-border; 
+    box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
   }
 
-  body {
-    @apply bg-background text-foreground;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  
-  /* Mobile touch optimization */
+body {
+  @apply bg-background text-foreground;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system,
+    Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    overflow-x: hidden;
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-text-size-adjust: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
   button, a, [role="button"] {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
-  
-  /* Prevent text selection on buttons */
-  button {
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-  
-  /* Fix for iOS input zoom */
-  input, select, textarea {
-    font-size: 16px;
-  }
+
+  button { user-select: none; }
+  input, select, textarea { font-size: 16px; }
+html { scroll-behavior: smooth; }
+html, body, #root { 
+  overscroll-behavior-x: none; 
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
 }
 
-/* Date range picker visual fixes */
+/* ========================================================================
+   UTILITIES (Shadows, gradients, animations)
+   ======================================================================== */
+@layer utilities {
+  .text-shadow-strong {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.9),
+      0 2px 6px rgba(0,0,0,0.75),
+      0 0 1px rgba(0,0,0,0.9);
+  }
+
+  .bg-gradient-primary { background-image: var(--gradient-primary); }
+  .bg-gradient-accent { background-image: var(--gradient-accent); }
+  .bg-gradient-subtle { background-image: var(--gradient-subtle); }
+
+  .shadow-soft { box-shadow: var(--shadow-soft); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+
+  .card-elevated {
+    @apply rounded-lg border bg-card transition-transform duration-300;
+    box-shadow: var(--shadow-soft);
+  }
+  .card-elevated:hover {
+    box-shadow: var(--shadow-glow);
+    transform: translateY(-2px);
+  }
+
+  .btn-animated {
+    @apply transition-transform duration-200 active:scale-95;
+  }
+
+  .btn-ripple { position: relative; overflow: hidden; }
+  .btn-ripple::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle,
+      rgba(255,255,255,0.35) 10%, rgba(255,255,255,0) 11%);
+    transform: scale(10);
+    opacity: 0;
+    transition: transform .6s, opacity .8s;
+  }
+  .btn-ripple:active::after {
+    transform: scale(0);
+    opacity: 1;
+  }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in { animation: fadeInUp .35s both; }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: var(--shadow-soft); }
+    50% { box-shadow: var(--shadow-glow); }
+  }
+  .animate-glow { animation: pulseGlow 2.5s ease-in-out infinite; }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .animate-slide-in-right { animation: slideInRight 0.5s ease-out; }
+}
+
+/* ========================================================================
+   DATE PICKER FIXES
+   ======================================================================== */
 @layer components {
-  /* Ensure both month panels are fully visible and themed */
   .rdp, .months {
     background-color: hsl(var(--card));
     color: hsl(var(--card-foreground));
   }
   .rdp-month, .months .month {
-    opacity: 1 !important;
     background-color: hsl(var(--card));
-    color: hsl(var(--card-foreground));
+    opacity: 1 !important;
   }
-  /* Improve contrast for day cells */
-  .rdp-day[aria-selected="true"], .day[aria-selected="true"] {
+  .rdp-day[aria-selected="true"],
+  .day[aria-selected="true"] {
     background-color: hsl(var(--primary)) !important;
     color: hsl(var(--primary-foreground)) !important;
   }
+}
+
+/* ========================================================================
+   TRAVEL BACKGROUND ENGINE (Parallax, Globe, Fog, Icons, Weather)
+   ======================================================================== */
+
+/* Container parallax + tilt */
+.travel-bg-base {
+  transform:
+    perspective(600px)
+    rotateX(var(--tilt-x))
+    rotateY(var(--tilt-y))
+    translate3d(0, calc(var(--scroll-parallax) * 0.2), 0);
+  transform-origin: center;
+  transition: transform 0.3s ease-out;
+}
+
+/* ========== Time-of-day gradients ========== */
+.travel-morning {
+  background: linear-gradient(135deg, #FFEDD5, #93C5FD, #60A5FA);
+}
+.travel-noon {
+  background: linear-gradient(135deg, #67E8F9, #22D3EE, #0284C7);
+}
+.travel-sunset {
+  background: linear-gradient(135deg, #FDBA74, #FB7185, #8B5CF6);
+}
+.travel-night {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.08), transparent 55%),
+    linear-gradient(145deg, #1E1B4B, #020617);
+}
+.night-sky {
+  filter: saturate(1.1);
+}
+
+/* ========== Rotating 3D Globe ========== */
+.travel-globe {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  width: 480px;
+  height: 480px;
+  transform: translateX(-50%) translateZ(-200px) rotateX(18deg);
+  background-image: url("https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg");
+  background-size: cover;
+  opacity: 0.18;
+  animation: globeSpin 120s linear infinite;
+  filter: brightness(0.9) contrast(1.1) blur(1px);
+  pointer-events: none;
+}
+@keyframes globeSpin {
+  0% { transform: translateX(-50%) rotateY(0deg) rotateX(18deg); }
+  100% { transform: translateX(-50%) rotateY(360deg) rotateX(18deg); }
+}
+
+/* ========== Blobs (mouse reactive) ========== */
+.travel-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  opacity: 0.28;
+  animation: travelFloat 18s ease-in-out infinite alternate;
+}
+.blob-1 {
+  width: 35rem;
+  height: 35rem;
+  top: -20%;
+  left: -20%;
+  background: radial-gradient(circle, rgba(94,234,212,0.8), transparent 60%);
+}
+.blob-2 {
+  width: 40rem;
+  height: 40rem;
+  bottom: -25%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(167,139,250,0.7), transparent 65%);
+}
+.blob-3 {
+  width: 30rem;
+  height: 30rem;
+  bottom: 20%;
+  left: 25%;
+  background: radial-gradient(circle, rgba(251,191,36,0.5), transparent 70%);
+  transform: translate3d(var(--mouse-x), var(--mouse-y), 0);
+}
+@keyframes travelFloat {
+  0% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(20px,-10px,0) scale(1.02); }
+  100% { transform: translate3d(-12px,15px,0) scale(1.01); }
+}
+
+/* ========== Floating Travel Icons ========== */
+.floating-icon {
+  position: absolute;
+  font-size: 2.5rem;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+  opacity: 0.85;
+  animation: floatDrift 14s ease-in-out infinite;
+}
+.icon-plane { top: 18%; left: 10%; animation-duration: 16s; }
+.icon-palm { bottom: 15%; right: 12%; animation-duration: 20s; }
+.icon-boat { bottom: 10%; left: 35%; animation-duration: 22s; }
+@keyframes floatDrift {
+  0% { transform: translate(0,0) rotate(0deg); }
+  50% { transform: translate(5px,-10px) rotate(1deg); }
+  100% { transform: translate(0,0) rotate(0deg); }
+}
+
+/* ========== Fog & Noise ========== */
+.fog-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    url("data:image/svg+xml,\
+     <svg width='1600' height='900' xmlns='http://www.w3.org/2000/svg'>\
+     <filter id='noise'>\
+     <feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3'/>\
+     </filter>\
+     <rect width='100%' height='100%' filter='url(%23noise)' opacity='0.09'/>\
+     </svg>");
+  mix-blend-mode: screen;
+}
+.fog-1 { opacity: 0.25; animation: fogMove 22s linear infinite; }
+.fog-2 { opacity: 0.18; animation: fogMove 32s linear infinite reverse; }
+.fog-3 { opacity: 0.12; animation: fogMove 45s linear infinite; }
+@keyframes fogMove {
+  0% { transform: translate(0,0); }
+  100% { transform: translate(-20px,30px); }
+}
+
+/* ========== Stars (night mode) ========== */
+.stars-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.0;
+  background-image:
+    radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1.5px 1.5px at 70% 60%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.5px 1.5px at 50% 80%, rgba(255,255,255,0.75), transparent);
+  animation: starTwinkle 6s ease-in-out infinite alternate;
+}
+.night-sky .stars-layer { opacity: 0.35; }
+@keyframes starTwinkle {
+  0% { opacity: 0.2; }
+  50% { opacity: 0.4; }
+  100% { opacity: 0.25; }
+}
+
+/* ========== Weather Layers ========== */
+.weather-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* Rain */
+.weather-rain.travel-sunset,
+.weather-rain.travel-noon {
+  opacity: 0.35;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.3) 0,
+    rgba(255,255,255,0) 60%
+  );
+  background-size: 2px 18px;
+  animation: rainFall 0.9s linear infinite;
+}
+@keyframes rainFall {
+  0% { background-position: 0 -20px; }
+  100% { background-position: 0 20px; }
+}
+
+/* Snow */
+.weather-snow.travel-night,
+.weather-snow.travel-morning {
+  opacity: 0.25;
+  background-image: radial-gradient(circle,
+    rgba(255,255,255,0.7) 0, transparent 60%);
+  background-size: 6px 6px;
+  animation: snowFall 8s linear infinite;
+}
+@keyframes snowFall {
+  0% { background-position: 0 -50px; }
+  100% { background-position: 0 50px; }
+}
+
+/* Clouds */
+.weather-clouds.travel-morning,
+.weather-clouds.travel-sunset {
+  opacity: 0.25;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255,255,255,0.55), transparent 60%),
+    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.45), transparent 60%);
+  animation: cloudDrift 40s linear infinite;
+}
+@keyframes cloudDrift {
+  0% { transform: translate(-20px,0); }
+  100% { transform: translate(40px,0); }
+}
+
+/* ========== Glassmorphism Floating Cards ========== */
+.glass-card {
+  position: absolute;
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg,
+    rgba(255,255,255,0.15),
+    rgba(255,255,255,0.03)
+  );
+  border: 1px solid rgba(255,255,255,0.18);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 18px 40px rgba(15,23,42,0.25);
+  opacity: 0.65;
+  animation: glassFloat 18s ease-in-out infinite alternate;
+}
+.glass-card-1 {
+  width: 260px;
+  height: 140px;
+  top: 22%;
+  right: 14%;
+}
+.glass-card-2 {
+  width: 220px;
+  height: 120px;
+  bottom: 22%;
+  left: 12%;
+}
+@keyframes glassFloat {
+  0% { transform: translate(0,0); opacity: 0.6; }
+  50% { transform: translate(-12px,18px); opacity: 0.75; }
+  100% { transform: translate(8px,-12px); opacity: 0.65; }
 }

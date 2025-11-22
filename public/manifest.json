@@ -1,0 +1,18 @@
+{
+  "name": "TTT CRM",
+  "short_name": "TTT CRM",
+  "description": "Professional CRM for travel consultants",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "badge": "/icons/notification-badge.jpg",
+
+}

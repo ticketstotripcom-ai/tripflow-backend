@@ -1,5 +1,5 @@
 import { createNotification, AppNotification } from './notifications';
-import { useSheetService } from '@/hooks/useSheetService';
+// Do NOT import React hooks here; this module runs outside React components
 import { GoogleSheetsService } from '@/lib/googleSheets';
 import { secureStorage } from '@/lib/secureStorage';
 
@@ -8,21 +8,24 @@ function uuid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export const notifyUser = async (email: string, title: string, message: string, type: AppNotification['type'] = 'general') => {
+type NotificationMeta = Partial<Pick<AppNotification, 'route' | 'targetTravellerName' | 'targetDateTime' | 'targetTripId'>>;
+
+export const notifyUser = async (email: string, title: string, message: string, type: AppNotification['type'] = 'general', meta?: NotificationMeta) => {
   try {
-    const sheetService = await useSheetService();
+    const sheetService = await getSheetsServiceDirect();
     await createNotification(sheetService, {
       id: uuid(), title, message, type, createdAt: new Date().toISOString(),
-      read: false, userEmail: email
+      read: false, userEmail: email,
+      route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
     });
   } catch (e) {
     console.warn('notifyUser failed (non-blocking):', e);
   }
 };
 
-export const notifyAll = async (title: string, message: string, type: AppNotification['type'] = 'general') => {
+export const notifyAll = async (title: string, message: string, type: AppNotification['type'] = 'general', meta?: NotificationMeta) => {
   try {
-    const sheetService = await useSheetService();
+    const sheetService = await getSheetsServiceDirect();
 
     // Prefer backend users (BACKEND SHEET via GoogleSheetsService)
     const credentials = await secureStorage.getCredentials();
@@ -71,7 +74,8 @@ export const notifyAll = async (title: string, message: string, type: AppNotific
     for (const email of uniqueEmails) {
       await createNotification(sheetService, {
         id: uuid(), title, message, type, createdAt: new Date().toISOString(),
-        read: false, userEmail: email
+        read: false, userEmail: email,
+        route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
       });
     }
   } catch (e) {
@@ -79,9 +83,9 @@ export const notifyAll = async (title: string, message: string, type: AppNotific
   }
 };
 
-export const notifyAdmin = async (title: string, message: string) => {
+export const notifyAdmin = async (title: string, message: string, meta?: NotificationMeta) => {
   try {
-    const sheetService = await useSheetService();
+    const sheetService = await getSheetsServiceDirect();
     const credentials = await secureStorage.getCredentials();
     let localServiceAccountJson: string | undefined;
     try { localServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
@@ -130,10 +134,24 @@ export const notifyAdmin = async (title: string, message: string) => {
     for (const email of uniqueAdmins) {
       await createNotification(sheetService, {
         id: uuid(), title, message, type: 'admin', createdAt: new Date().toISOString(),
-        read: false, userEmail: email
+        read: false, userEmail: email,
+        route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
       });
     }
   } catch (e) {
     console.warn('notifyAdmin failed (non-blocking):', e);
   }
 };
+async function getSheetsServiceDirect(): Promise<GoogleSheetsService> {
+  const credentials = await secureStorage.getCredentials();
+  if (!credentials) throw new Error('Sheets credentials not configured');
+  let localServiceAccountJson: string | undefined;
+  try { localServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+  return new GoogleSheetsService({
+    apiKey: credentials.googleApiKey || '',
+    serviceAccountJson: credentials.googleServiceAccountJson || localServiceAccountJson,
+    sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+    worksheetNames: credentials.worksheetNames,
+    columnMappings: credentials.columnMappings,
+  });
+}

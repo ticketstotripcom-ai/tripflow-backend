@@ -1,0 +1,363 @@
+/**
+ * Enhanced Google App Script for TTT CRM Notifications
+ * Supports push notifications, rich content, and improved blackboard integration
+ */
+
+// Configuration
+const CONFIG = {
+  BACKEND_URL: 'https://tripflow-backend-6xzr.onrender.com/api/notify',
+  FALLBACK_URL: 'https://your-fallback-backend.com/api/notify',
+  MAX_RETRY_ATTEMPTS: 3,
+  RETRY_DELAY: 1000,
+  NOTIFICATION_TYPES: {
+    NEW_TRIP: 'new_trip',
+    TRIP_ASSIGNED: 'trip_assigned',
+    TRIP_BOOKED: 'trip_booked',
+    BLACKBOARD_POST: 'blackboard_post',
+    FOLLOW_UP: 'follow_up',
+    SYSTEM_ALERT: 'system_alert'
+  }
+};
+
+/**
+ * Enhanced notification function with retry logic and better error handling
+ */
+function notifyCRMAppOnEdit(e) {
+  try {
+    const sheet = e.source.getActiveSheet();
+    const sheetName = sheet.getName();
+    const row = e.range.getRow();
+    const col = e.range.getColumn();
+    const data = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const timestamp = new Date();
+
+    // Notification log sheet
+    const notifSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Notifications");
+    if (!notifSheet) {
+      Logger.log('Notifications sheet not found');
+      return;
+    }
+
+    let notification = null;
+
+    // MASTER DATA — New Lead, Assignment, Booking Updates
+    if (sheetName === "MASTER DATA") {
+      notification = handleMasterDataChanges(e, data, timestamp);
+    }
+
+    // BLACKBOARD — New posts and updates
+    if (sheetName === "blackboard") {
+      notification = handleBlackboardChanges(e, data, timestamp);
+    }
+
+    // Log and send notification
+    if (notification && notification.title && notification.message) {
+      const userEmail = notification.role === 'all' ? 'all' : notification.role;
+
+      logNotification(notifSheet, notification, userEmail);
+      sendPushNotificationWithRetry(notification);
+      sendToBackend(notification);
+    }
+  } catch (err) {
+    Logger.log("? Error in notifyCRMAppOnEdit: " + err);
+  }
+}
+
+/**
+ * Handle MASTER DATA sheet changes
+ */
+function handleMasterDataChanges(e, data, timestamp) {
+  const col = e.range.getColumn();
+  const travellerName = data[4] || 'Unknown Traveller';
+  const consultant = data[2] || 'Unassigned';
+  
+  let notification = {
+    timestamp: timestamp,
+    sheetName: 'MASTER DATA',
+    type: '',
+    title: '',
+    message: '',
+    role: '',
+    priority: 'medium',
+    actions: []
+  };
+
+  // New trip added (column 1 - Trip ID)
+  if (col === 1 && e.value) {
+    notification.type = CONFIG.NOTIFICATION_TYPES.NEW_TRIP;
+    notification.title = "?? New Trip Added";
+    notification.message = `New trip for "${travellerName}" has been added to the system.`;
+    notification.role = "admin";
+    notification.priority = "high";
+    notification.actions = [
+      { action: 'view', title: 'View Trip' },
+      { action: 'assign', title: 'Assign Consultant' }
+    ];
+  }
+
+  // Trip assigned (column 3 - Consultant)
+  if (col === 3 && e.value) {
+    notification.type = CONFIG.NOTIFICATION_TYPES.TRIP_ASSIGNED;
+    notification.title = "?? Trip Assigned";
+    notification.message = `Trip for "${travellerName}" assigned to ${consultant}.`;
+    notification.role = consultant;
+    notification.priority = "high";
+    notification.actions = [
+      { action: 'view', title: 'View Trip' },
+      { action: 'contact', title: 'Contact Traveller' }
+    ];
+  }
+
+  // Trip booked (column 4 - Status)
+  if (col === 4 && e.value === "Booked") {
+    notification.type = CONFIG.NOTIFICATION_TYPES.TRIP_BOOKED;
+    notification.title = "?? Trip Booked!";
+    notification.message = `${consultant} just booked a trip for "${travellerName}".`;
+    notification.role = "all";
+    notification.priority = "high";
+    notification.actions = [
+      { action: 'celebrate', title: '?? Celebrate!' },
+      { action: 'view', title: 'View Details' }
+    ];
+  }
+
+  // Follow-up reminder (column 8 - Follow Up Date)
+  if (col === 8 && e.value) {
+    notification.type = CONFIG.NOTIFICATION_TYPES.FOLLOW_UP;
+    notification.title = "?? Follow-up Reminder";
+    notification.message = `Follow-up scheduled for "${travellerName}" on ${e.value}.`;
+    notification.role = consultant;
+    notification.priority = "medium";
+    notification.actions = [
+      { action: 'remind', title: 'Set Reminder' },
+      { action: 'call', title: 'Call Now' }
+    ];
+  }
+
+  return notification;
+}
+
+/**
+ * Handle BLACKBOARD sheet changes
+ */
+function handleBlackboardChanges(e, data, timestamp) {
+  const row = e.range.getRow();
+  if (row <= 1) return null;
+  
+  const author = data[2] || 'Unknown Author';
+  const postType = data[3] || 'general';
+  const content = data[4] || '';
+  const urgency = data[5] || 'normal';
+  
+  let notification = {
+    timestamp: timestamp,
+    sheetName: 'blackboard',
+    type: CONFIG.NOTIFICATION_TYPES.BLACKBOARD_POST,
+    title: "?? New Blackboard Post",
+    message: `New post by ${author} on Blackboard: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`,
+    role: "all",
+    priority: urgency === 'urgent' ? 'high' : 'medium',
+    actions: [
+      { action: 'view', title: 'View Post' },
+      { action: 'reply', title: 'Reply' }
+    ]
+  };
+
+  if (postType === 'announcement') {
+    notification.title = "?? New Announcement";
+    notification.priority = "high";
+  } else if (postType === 'update') {
+    notification.title = "?? System Update";
+  } else if (postType === 'alert') {
+    notification.title = "?? Important Alert";
+    notification.priority = "high";
+  }
+
+  return notification;
+}
+
+/**
+ * Log notification to Google Sheets
+ */
+function logNotification(sheet, notification, userEmail) {
+  try {
+    sheet.appendRow([
+      notification.timestamp,
+      notification.sheetName,
+      notification.type,
+      notification.title,
+      notification.message,
+      userEmail,
+      notification.priority,
+      JSON.stringify(notification.actions || []),
+      'unread'
+    ]);
+  } catch (error) {
+    Logger.log('Failed to log notification: ' + error);
+  }
+}
+
+/**
+ * Send push notification with retry logic
+ */
+function sendPushNotificationWithRetry(notification, attempt) {
+  attempt = attempt || 1;
+  try {
+    const pushData = {
+      title: notification.title,
+      body: notification.message,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: notification.type,
+      requireInteraction: notification.priority === 'high',
+      actions: notification.actions || [],
+      data: {
+        type: notification.type,
+        timestamp: notification.timestamp,
+        role: notification.role,
+        priority: notification.priority
+      },
+      vibrate: notification.priority === 'high' ? [200, 100, 200] : [100, 50, 100]
+    };
+
+    if (notification.role === 'all') {
+      notifyAllUsers(pushData);
+    } else {
+      notifyUsersByRole(notification.role, pushData);
+    }
+  } catch (error) {
+    Logger.log(`Push notification failed (attempt ${attempt}): ${error}`);
+    if (attempt < CONFIG.MAX_RETRY_ATTEMPTS) {
+      Utilities.sleep(CONFIG.RETRY_DELAY * attempt);
+      sendPushNotificationWithRetry(notification, attempt + 1);
+    }
+  }
+}
+
+/**
+ * Send notification to backend API
+ */
+function sendToBackend(notification) {
+  try {
+    const payload = {
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      role: notification.role,
+      priority: notification.priority,
+      actions: notification.actions,
+      timestamp: notification.timestamp
+    };
+
+    const options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    const response = UrlFetchApp.fetch(CONFIG.BACKEND_URL, options);
+    if (response.getResponseCode() !== 200 && CONFIG.FALLBACK_URL) {
+      UrlFetchApp.fetch(CONFIG.FALLBACK_URL, options);
+    }
+  } catch (error) {
+    Logger.log('Failed to send to backend: ' + error);
+  }
+}
+
+/**
+ * Notify all users
+ */
+function notifyAllUsers(pushData) {
+  Logger.log('?? Notifying all users: ' + pushData.title);
+}
+
+/**
+ * Notify users by role
+ */
+function notifyUsersByRole(role, pushData) {
+  Logger.log(`?? Notifying users with role "${role}": ${pushData.title}`);
+}
+
+/**
+ * Send targeted notification
+ */
+function sendTargetedNotification(targetEmail, title, message, type, priority) {
+  type = type || 'general';
+  priority = priority || 'medium';
+
+  const notification = {
+    timestamp: new Date(),
+    sheetName: 'SYSTEM',
+    type: type,
+    title: title,
+    message: message,
+    role: targetEmail,
+    priority: priority,
+    actions: [{ action: 'view', title: 'View Details' }]
+  };
+
+  const notifSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Notifications");
+  if (notifSheet) logNotification(notifSheet, notification, targetEmail);
+
+  const pushData = {
+    title: title,
+    body: message,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: type,
+    requireInteraction: priority === 'high',
+    actions: notification.actions,
+    data: {
+      type: type,
+      timestamp: notification.timestamp,
+      role: targetEmail,
+      priority: priority
+    },
+    vibrate: priority === 'high' ? [200, 100, 200] : [100, 50, 100]
+  };
+
+  notifyUserByEmail(targetEmail, pushData);
+}
+
+/**
+ * Notify specific user by email
+ */
+function notifyUserByEmail(email, pushData) {
+  Logger.log(`?? Notifying user ${email}: ${pushData.title}`);
+}
+
+/**
+ * Process scheduled notifications
+ */
+function processScheduledNotifications() {
+  try {
+    const now = new Date();
+    const notifSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Notifications");
+    if (!notifSheet) return;
+    
+    const data = notifSheet.getDataRange().getValues();
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const status = row[8];
+      const timestamp = new Date(row[0]);
+      if (status === 'unread' && (now - timestamp) > 300000) {
+        notifSheet.getRange(i + 1, 9).setValue('processed');
+        const notification = {
+          title: row[3],
+          message: row[4],
+          role: row[5],
+          priority: row[6] || 'medium',
+          type: row[2]
+        };
+        if (notification.priority === 'high') {
+          sendPushNotificationWithRetry(notification);
+        }
+      }
+    }
+    Logger.log('? Scheduled notifications processed');
+  } catch (error) {
+    Logger.log('Failed to process scheduled notifications: ' + error);
+  }
+}

@@ -4,6 +4,8 @@ import { AppNotification, fetchNotifications, markNotificationsAsRead } from '@/
 import { playSound, vibrate } from '@/utils/notifyHelpers';
 import { useSheetService } from '@/hooks/useSheetService';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useNavigate } from 'react-router-dom';
+import { stateManager } from '@/lib/stateManager';
 
 const STORAGE_KEY = 'crm_notifications_cache_v1';
 
@@ -14,6 +16,7 @@ export default function NotificationBell({ user }: { user: { email?: string } })
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
+  const navigate = useNavigate();
 
   // hydrate from cache immediately
   useEffect(() => {
@@ -69,11 +72,14 @@ export default function NotificationBell({ user }: { user: { email?: string } })
 
     load();
     const interval = setInterval(load, 60000);
+    const refreshListener = () => load();
+    window.addEventListener('sheet-notifications-refresh', refreshListener as any);
     const onOnline = () => load();
     window.addEventListener('online', onOnline);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      window.removeEventListener('sheet-notifications-refresh', refreshListener as any);
       window.removeEventListener('online', onOnline);
     };
   }, [sheetService, user?.email]);
@@ -107,6 +113,74 @@ export default function NotificationBell({ user }: { user: { email?: string } })
     }
   };
 
+  const handleClickNotification = async (n: AppNotification) => {
+    // Mark as read locally and in sheet
+    try {
+      if (sheetService) await markNotificationsAsRead(sheetService as any, [n]);
+    } catch {}
+    setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    } catch {}
+
+    // Deep-link navigation
+    if (n.route) {
+      navigate(n.route);
+    } else if (n.targetTravellerName || n.targetDateTime || n.targetTripId) {
+      stateManager.setPendingTarget({ travellerName: n.targetTravellerName, dateAndTime: n.targetDateTime, tripId: n.targetTripId });
+      navigate('/dashboard?view=analytics');
+    } else if (n.message) {
+      // Prefer extracting traveller/customer name from message (handles quotes and common phrasing)
+      const msg = (n.message || '').trim();
+      let key = '';
+      // 1) Name inside quotes, e.g., Trip for "Ankush Kalekar" assigned to ...
+      const mQuoted = msg.match(/"([^\"]{2,80})"/);
+      if (mQuoted && mQuoted[1]) {
+        key = mQuoted[1].trim();
+      }
+      // 2) for <name> assigned ... with optional quotes
+      if (!key) {
+        const mFor = msg.match(/\bfor\s+["']?([A-Za-z][A-Za-z\s.'-]{1,80})["']?\s+assigned\b/i);
+        if (mFor && mFor[1]) key = mFor[1].trim();
+      }
+      // 3) <name> booked with us
+      if (!key) {
+        const mBooked = msg.match(/^([A-Za-z][A-Za-z\s.'-]{1,80})\s+booked\b/i);
+        if (mBooked && mBooked[1]) key = mBooked[1].trim();
+      }
+      // 4) Fallback: first capitalized phrase (likely a name)
+      if (!key) {
+        const words = msg.split(/\s+/);
+        const start = words.findIndex(w => /^[A-Z]/.test(w));
+        if (start >= 0) key = words.slice(start, start + 3).join(' ').trim();
+      }
+      // Final fallback: avoid generic title like "Trip Assigned"
+      if (!key) key = msg.replace(/[-–:]/g, ' ').trim();
+      stateManager.setSearchQuery(key);
+      navigate('/dashboard?view=analytics');
+    } else {
+      // Heuristic: fallback to search — prefer customer name from message
+      const msg = n.message || '';
+      let key = '';
+      const m1 = msg.match(/for\s+([A-Za-z\s.'-]+)/i);
+      if (m1) {
+        key = m1[1].split(/assigned|has|to|booked|,|\./i)[0].trim();
+      } else {
+        const m2 = msg.match(/^([A-Za-z\s.'-]+)\s+booked/i);
+        if (m2) key = m2[1].trim();
+      }
+      if (!key) {
+        const words = msg.split(/\s+/);
+        const start = words.findIndex(w => /^[A-Z]/.test(w));
+        if (start >= 0) key = words.slice(start, start + 3).join(' ').trim();
+      }
+      if (!key) key = (n.title || msg).split(/[-–:"]/)[0].trim();
+      stateManager.setSearchQuery(key);
+      navigate('/dashboard?view=analytics');
+    }
+    setOpen(false);
+  };
+
   return (
     <div className="relative">
       <Tooltip>
@@ -130,21 +204,28 @@ export default function NotificationBell({ user }: { user: { email?: string } })
         </TooltipContent>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 shadow-xl rounded-xl p-3 z-[110] border border-slate-200 dark:border-slate-700">
+        <div
+          className="fixed right-2 top-[72px] w-[min(20rem,calc(100vw-1rem))] max-h-[min(75vh,calc(100vh-6rem))] overflow-auto bg-white dark:bg-slate-900 shadow-xl rounded-xl p-3 z-[120] border border-slate-200 dark:border-slate-700"
+        >
           {notifications.length === 0 ? (
             <div className="text-xs text-muted-foreground">No new notifications</div>
           ) : (
             notifications.map((n) => (
-              <div key={n.id} className="border-b py-1 last:border-0">
+              <button key={n.id} className="border-b py-1 last:border-0 text-left w-full" onClick={() => handleClickNotification(n)}>
                 <p className="font-semibold flex items-center gap-2">
                   {n.title}
                   {n.read && <span className="text-[10px] text-muted-foreground uppercase">Viewed</span>}
                 </p>
                 <p className="text-sm text-muted-foreground">{n.message}</p>
                 <div className="text-[10px] text-muted-foreground mt-1">{new Date(n.createdAt).toLocaleString()}</div>
-              </div>
+              </button>
             ))
           )}
+          <div className="pt-2 text-right">
+            <button className="text-xs text-primary hover:underline" onClick={() => { setOpen(false); navigate('/notifications'); }}>
+              View all
+            </button>
+          </div>
         </div>
       )}
     </div>

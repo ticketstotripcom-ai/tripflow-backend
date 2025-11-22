@@ -32,25 +32,24 @@ export function DateRangePicker({ value, onChange, placeholder = 'Select date ra
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn('w-full justify-start text-left font-normal h-9', !value?.from && 'text-muted-foreground', className)}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {label}
-        </Button>
+        <div className={cn('relative w-full h-10 flex items-center justify-between whitespace-nowrap rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50', !value?.from && 'text-muted-foreground', className)}>
+          <div className="flex items-center">
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {label}
+          </div>
+        </div>
       </PopoverTrigger>
       <PopoverContent className="p-0" align={align}>
         <div className="p-3">
           <Calendar
             mode="range"
             numberOfMonths={1}
-            selected={value}
-            onSelect={(r: DateRange | undefined) => onChange?.(r || {})}
-            defaultMonth={value?.from}
+            selected={value?.from || value?.to ? value : undefined}
+            onSelect={(r: DateRange | undefined) => onChange?.(r ?? { from: undefined, to: undefined })}
+            defaultMonth={value?.from || value?.to}
           />
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => { onChange?.({}); }}>Clear</Button>
+            <Button variant="ghost" size="sm" onClick={() => { onChange?.({ from: undefined, to: undefined }); }}>Clear</Button>
             <Button size="sm" onClick={() => setOpen(false)}>Apply</Button>
           </div>
         </div>

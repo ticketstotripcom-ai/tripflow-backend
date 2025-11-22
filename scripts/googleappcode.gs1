@@ -1,0 +1,31 @@
+function doGet(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Notifications');
+    if (!sheet) throw new Error('Notifications sheet not found');
+    var data = sheet.getDataRange().getValues();
+    if (!data || data.length === 0) data = [];
+    var headers = data.shift() || [];
+    var json = data.map(function (r) {
+      var obj = {};
+      headers.forEach(function (h, i) { obj[String(h || '')] = r[i]; });
+      return obj;
+    });
+
+    var output = ContentService.createTextOutput(JSON.stringify(json))
+      .setMimeType(ContentService.MimeType.JSON);
+    output = addCorsHeaders(output);
+    return output;
+  } catch (err) {
+    var errorOut = ContentService.createTextOutput(JSON.stringify({ error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+    return addCorsHeaders(errorOut);
+  }
+}
+
+function addCorsHeaders(response) {
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  return response;
+}
+

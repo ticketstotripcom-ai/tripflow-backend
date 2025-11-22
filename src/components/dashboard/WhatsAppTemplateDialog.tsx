@@ -52,19 +52,19 @@ const WhatsAppTemplateDialog = ({ open, onClose, lead }: WhatsAppTemplateDialogP
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[85vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-green-600" />
             WhatsApp Templates - {lead.travellerName}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-4 h-[60vh]">
+        <div className="grid grid-cols-3 gap-4 flex-1 overflow-hidden">
           <div className="col-span-1 border-r pr-4">
             <h3 className="font-semibold mb-3 text-sm">Select Template</h3>
-            <ScrollArea className="h-[calc(60vh-2rem)]">
-              <div className="space-y-2">
+            <ScrollArea className="h-[calc(100%-2rem)]">
+              <div className="space-y-2 pb-20">
                 {whatsappTemplates.map((template) => (
                   <Button
                     key={template.id}
@@ -92,15 +92,15 @@ const WhatsAppTemplateDialog = ({ open, onClose, lead }: WhatsAppTemplateDialogP
             </ScrollArea>
           </div>
 
-          <div className="col-span-2">
-            <h3 className="font-semibold mb-3 text-sm">Preview & Edit</h3>
+          <div className="col-span-2 flex flex-col">
+            <h3 className="font-semibold mb-3 text-sm flex-shrink-0">Preview & Edit</h3>
             <Textarea
               value={customMessage}
               onChange={(e) => setCustomMessage(e.target.value)}
               placeholder="Select a template or write your custom message..."
-              className="h-[calc(60vh-8rem)] resize-none"
+              className="flex-1 resize-none"
             />
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2 flex-shrink-0">
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>

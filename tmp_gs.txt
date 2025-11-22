@@ -1,0 +1,21 @@
+}
+
+export interface SheetLead {
+  tripId: string;
+  dateAndTime: string;
+  consultant: string;
+  status: string;
+   * Now fetches ALL rows including empty ones to preserve row numbering
+   */
+  async fetchLeads(forceRefresh = false, signal?: AbortSignal): Promise<SheetLead[]> {
+    if (!forceRefresh && this.leadsCache && Date.now() - this.leadsCache.timestamp < this.CACHE_TTL) {
+      console.log('? Returning cached leads');
+      return this.leadsCache.data;
+    }
+    }
+
+    const leads = await this.fetchLeads();
+
+    const targetDate = parseFlexibleDateUtil(dateAndTime);
+
+    const sameDay = (d1: Date | null, d2: Date | null) =>

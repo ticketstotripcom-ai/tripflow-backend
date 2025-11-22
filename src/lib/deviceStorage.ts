@@ -22,14 +22,39 @@ async function ensureDirectory(path: string) {
   }
 }
 
+// Initialize with retry mechanism
+async function ensureDirectoryWithRetry(path: string, maxRetries = 3): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await ensureDirectory(path);
+      return;
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        console.error(`[deviceStorage] Failed to ensure directory after ${maxRetries} attempts:`, error);
+        throw error;
+      }
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
+    }
+  }
+}
+
 export async function ensureAppStorageStructure(): Promise<boolean> {
   if (!isFilesystemAvailable()) {
+    console.log("[deviceStorage] Filesystem not available, skipping storage setup");
     return false;
   }
 
-  await ensureDirectory(ROOT_DIR);
-  await Promise.all(SUB_DIRECTORIES.map((dir) => ensureDirectory(`${ROOT_DIR}/${dir}`)));
-  return true;
+  try {
+    console.log("[deviceStorage] Ensuring app storage structure...");
+    await ensureDirectoryWithRetry(ROOT_DIR);
+    await Promise.all(SUB_DIRECTORIES.map((dir) => ensureDirectoryWithRetry(`${ROOT_DIR}/${dir}`)));
+    console.log("[deviceStorage] Storage structure ensured successfully");
+    return true;
+  } catch (error) {
+    console.error("[deviceStorage] Failed to ensure storage structure:", error);
+    return false;
+  }
 }
 
 export async function persistServiceAccountJson(json: string): Promise<void> {
@@ -47,16 +72,16 @@ export async function persistServiceAccountJson(json: string): Promise<void> {
       console.info('[deviceStorage] Service account JSON persisted to device storage');
     } catch (error) {
       console.warn('[deviceStorage] Failed to write service account JSON to filesystem, falling back to localStorage', error);
-      try { localStorage.setItem('serviceAccountJson', json); } catch {}
+      try {  } catch {}
     }
   } else {
-    try { localStorage.setItem('serviceAccountJson', json); } catch {}
+    try {  } catch {}
   }
 }
 
 export async function readPersistedServiceAccountJson(): Promise<string | null> {
   try {
-    const cached = localStorage.getItem('serviceAccountJson');
+    const cached = null;
     if (cached) return cached;
   } catch {}
 
@@ -80,7 +105,7 @@ export async function readPersistedServiceAccountJson(): Promise<string | null> 
 }
 
 export async function clearPersistedServiceAccountJson(): Promise<void> {
-  try { localStorage.removeItem('serviceAccountJson'); } catch {}
+  try {  } catch {}
 
   if (!isFilesystemAvailable()) return;
 
@@ -120,7 +145,7 @@ export async function persistAppMetadata(payload: AppMetadataPayload): Promise<v
   }
 
   try {
-    localStorage.setItem('crm_app_metadata', data);
+    
   } catch (error) {
     console.warn('[deviceStorage] Failed to persist app metadata to localStorage', error);
   }
@@ -128,7 +153,7 @@ export async function persistAppMetadata(payload: AppMetadataPayload): Promise<v
 
 export async function readAppMetadata(): Promise<AppMetadataPayload | null> {
   try {
-    const raw = localStorage.getItem('crm_app_metadata');
+    const raw = null;
     if (raw) return JSON.parse(raw);
   } catch {}
 
@@ -154,7 +179,7 @@ export async function persistCacheSnapshot(key: string, value: any): Promise<voi
   const payload = JSON.stringify({ value, updatedAt: new Date().toISOString() });
 
   try {
-    localStorage.setItem(`crm_cache_${key}`, payload);
+    
   } catch (error) {
     console.warn(`[deviceStorage] Failed to cache ${key} in localStorage`, error);
   }
@@ -179,7 +204,7 @@ export async function readCacheSnapshot<T = any>(key: string): Promise<T | null>
   if (!key) return null;
 
   try {
-    const raw = localStorage.getItem(`crm_cache_${key}`);
+    const raw = null;
     if (raw) {
       const parsed = JSON.parse(raw);
       return parsed.value as T;

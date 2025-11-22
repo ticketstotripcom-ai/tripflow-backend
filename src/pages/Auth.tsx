@@ -16,7 +16,7 @@ const Auth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Redirect if already logged in → go to Home
+    // Redirect if already logged in — go to Home
     if (authService.isAuthenticated()) {
       navigate("/");
     }
@@ -94,7 +94,7 @@ const Auth = () => {
             <p>Login credentials from Google Sheets BACKEND SHEET</p>
             <p className="text-xs">Configure Google Sheets in Settings after first login</p>
             <div className="mt-4 p-3 border border-primary/20 rounded-lg bg-primary/5">
-              <p className="font-semibold text-primary">🔑 Default Admin Account</p>
+              <p className="font-semibold text-primary">Default Admin Account</p>
               <p className="text-xs mt-1">Email: ticketstotrip.com@gmail.com</p>
               <p className="text-xs">Password: 123456</p>
               <p className="text-xs mt-2 text-muted-foreground">Use this to login and setup Google Sheets credentials</p>
@@ -107,3 +107,4 @@ const Auth = () => {
 };
 
 export default Auth;
+

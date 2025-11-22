@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SheetLead } from "@/lib/googleSheets";
 import { authService } from "@/lib/authService";
 import { isBookedStatus, isCancelCategoryStatus, isNewCategoryStatus, normalizeStatus } from "@/lib/leadStatus";
-import { Clipboard, MessageCircle, Users, Award, RefreshCw } from "lucide-react";
+import { Clipboard, MessageCircle, Users, Award, RefreshCw, X } from "lucide-react";
 import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
 import { parseFlexibleDate, formatDisplayDate, extractAnyDateFromText } from "@/lib/dateUtils";
 import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
@@ -206,8 +206,10 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
   const hasRange = !!dateRange.from || !!dateRange.to;
 
   const leadsForDay = useMemo(() => {
-    const from = dateRange.from ? new Date(dateRange.from.setHours(0, 0, 0, 0)) : null;
-    const to = dateRange.to ? new Date(dateRange.to.setHours(23, 59, 59, 999)) : null;
+    const from = dateRange.from ? new Date(dateRange.from) : null;
+    if (from) from.setHours(0, 0, 0, 0);
+    const to = dateRange.to ? new Date(dateRange.to) : null;
+    if (to) to.setHours(23, 59, 59, 999);
     return leads.filter((l) => {
       const nd = extractAnyDateFromText(l.notes) || parseFlexibleDate(l.dateAndTime);
       if (!nd) return false;
@@ -287,24 +289,40 @@ const DailyReportDialog = ({ open, onClose, mode, leads, consultants = [] }: Dai
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl bg-gradient-to-b from-white to-indigo-50 dark:from-slate-950 dark:to-slate-900">
-        <DialogHeader className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-500 dark:via-purple-500 dark:to-pink-500 text-white rounded-lg p-3 sticky top-0 z-10 shadow">
+      <DialogContent className="max-w-4xl bg-gradient-to-b from-white to-indigo-50 dark:from-slate-950 dark:to-slate-900 max-h-[85vh] flex flex-col">
+        <DialogHeader className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-500 dark:via-purple-500 dark:to-pink-500 text-white rounded-lg p-3 sticky top-0 z-10 shadow flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-white">
             {mode === "consultant" ? <Users className="h-5 w-5" /> : <Users className="h-5 w-5" />}
             {mode === "consultant" ? "Daily Report (My Activities)" : "Daily Report (Team Builder)"}
           </DialogTitle>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 overflow-hidden">
           <Card className="md:col-span-1 bg-indigo-50/50 dark:bg-slate-900 border-indigo-200 dark:border-indigo-500/40">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs">Date Range</Label>
-                <DateRangePicker value={dateRange} onChange={(r) => { setDateRange(r || {}); }} />
-              </div>
+              <ScrollArea className="h-[calc(85vh-12rem)]">
+                <div className="space-y-2 pb-20">
+                  <Label className="text-xs">Date Range</Label>
+                  <DateRangePicker value={dateRange?.from || dateRange?.to ? dateRange : undefined as any} onChange={(r) => { setDateRange(r ?? { from: undefined, to: undefined } as any); }} />
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <Button variant="outline" size="sm" onClick={() => { const d=new Date(); d.setHours(0,0,0,0); setDateRange({ from: new Date(d), to: new Date(d) }); }}>Today</Button>
+                    <Button variant="outline" size="sm" onClick={() => { const to=new Date(); const from=new Date(); from.setDate(to.getDate()-6); from.setHours(0,0,0,0); to.setHours(23,59,59,999); setDateRange({ from, to }); }}>Last 7 days</Button>
+                    <Button variant="outline" size="sm" onClick={() => { const now=new Date(); const from=new Date(now.getFullYear(), now.getMonth(), 1); const to=new Date(now.getFullYear(), now.getMonth()+1,0); from.setHours(0,0,0,0); to.setHours(23,59,59,999); setDateRange({ from, to }); }}>This month</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDateRange({} as any)}>Clear</Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <input type="date" className="border rounded px-2 py-1 text-xs bg-background" value={dateRange?.from ? new Date(dateRange.from).toISOString().slice(0,10) : ''} onChange={(e) => { const v = e.target.value ? new Date(e.target.value) : undefined; setDateRange(prev => ({ ...(prev||{}), from: v } as any)); }} />
+                    <input type="date" className="border rounded px-2 py-1 text-xs bg-background" value={dateRange?.to ? new Date(dateRange.to).toISOString().slice(0,10) : ''} onChange={(e) => { const v = e.target.value ? new Date(e.target.value) : undefined; setDateRange(prev => ({ ...(prev||{}), to: v } as any)); }} />
+                  </div>
+                </div>
+              </ScrollArea>
 
               {mode === "consultant" && (
                 <div className="space-y-1">
@@ -528,3 +546,4 @@ function Stat({ label, value, color = "slate" }: { label: string; value: number;
 }
 
 export default DailyReportDialog;
+

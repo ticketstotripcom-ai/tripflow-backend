@@ -1,215 +1,143 @@
-import { secureStorage } from '@/lib/secureStorage';
-import { readPersistedServiceAccountJson } from '@/lib/deviceStorage';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { GoogleSheetsService } from "@/lib/googleSheets";
+import { useToast } from "@/components/ui/use-toast";
+import { secureStorage } from "@/lib/secureStorage";
+import { cacheGet, cacheSet } from "@/lib/appCache";
 
-const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
+export function useSheetService() {
+  const [service, setService] = useState<GoogleSheetsService | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const { toast } = useToast();
 
-type Headers = Record<string, string>;
+  const initializeService = useCallback(async () => {
+    // Cancel any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-// Define a type for a cell value
-type CellValue = string | number | null;
-
-function normalizeSheetName(name: string): string {
-  if (!name) return '';
-  return name.includes('!') ? name.split('!')[0] : name;
-}
-
-function columnIndexToLetter(index: number): string {
-  if (index < 0) throw new Error('Column index must be >= 0');
-  let n = index + 1;
-  let result = '';
-  while (n > 0) {
-    const remainder = (n - 1) % 26;
-    result = String.fromCharCode(65 + remainder) + result;
-    n = Math.floor((n - 1) / 26);
-  }
-  return result;
-}
-
-async function getAccessToken(serviceAccountJson?: string): Promise<string> {
-  if (!serviceAccountJson) throw new Error('Service Account JSON required');
-  const serviceAccount = JSON.parse(serviceAccountJson);
-  const now = Math.floor(Date.now() / 1000);
-  const expiry = now + 3600;
-
-  const header = { alg: 'RS256', typ: 'JWT', kid: serviceAccount.private_key_id };
-  const payload = {
-    iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: expiry,
-    iat: now,
-  };
-
-  const base64url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const headerEncoded = base64url(JSON.stringify(header));
-  const payloadEncoded = base64url(JSON.stringify(payload));
-  const unsignedToken = `${headerEncoded}.${payloadEncoded}`;
-
-  const privateKey = serviceAccount.private_key
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s/g, '');
-
-  const binaryKey = Uint8Array.from(atob(privateKey), (c) => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey('pkcs8', binaryKey, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(unsignedToken));
-  const signatureBase64 = base64url(String.fromCharCode(...new Uint8Array(signature)));
-  const jwt = `${unsignedToken}.${signatureBase64}`;
-
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return data.access_token as string;
-}
-
-export interface SheetService {
-  appendRow: (sheetName: string, row: CellValue[]) => Promise<void>;
-  getRows: (sheetName: string, range?: string) => Promise<CellValue[][]>;
-  batchUpdateCells: (sheetName: string, cells: Array<{ row: number; column: number; value: CellValue }>) => Promise<void>;
-}
-
-export async function useSheetService(): Promise<SheetService> {
-  const credentials = await secureStorage.getCredentials();
-  if (!credentials) throw new Error('Google Sheets not configured');
-
-  const sheetId = credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '';
-  const apiKey = credentials.googleApiKey;
-  let serviceAccountJson = credentials.googleServiceAccountJson;
-  // Fallback to localStorage for service account JSON (preview resilience)
-  if (!serviceAccountJson) {
     try {
-      serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
-    } catch (e) {
-      console.warn('Could not read service account from localStorage', e);
-    }
-    if (!serviceAccountJson) {
-      serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
-    }
-  }
+      setLoading(true);
+      setError(null);
 
-  const authHeaders = async (): Promise<Headers> => {
-    const headers: Headers = { 'Content-Type': 'application/json' };
-    if (serviceAccountJson) {
-      const token = await getAccessToken(serviceAccountJson);
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
-  const appendRow = async (sheetName: string, row: CellValue[]) => {
-    if (!sheetName) {
-      throw new Error('Missing sheet name for append operation.');
-    }
-    const normalizedSheet = normalizeSheetName(
-      (() => {
-        const key = sheetName.toLowerCase();
-        if (key === 'users') return 'Users';
-        if (key === 'blackboard') return 'Blackboard';
-        if (key === 'notifications' || key === 'notification') return 'Notification';
-        return sheetName;
-      })()
-    );
-    if (!serviceAccountJson) {
-      console.error('⚠️ Service Account JSON missing, using localStorage fallback');
-      try {
-        serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
-      } catch (e) {
-        console.warn('Could not read service account from localStorage', e);
+      // Get structured credentials (localSecrets + persisted)
+      const credentials = await secureStorage.getCredentials();
+      if (!credentials) {
+        if (mountedRef.current) {
+          setError("Google credentials not found");
+          setLoading(false);
+        }
+        return;
       }
-      if (!serviceAccountJson) {
-        serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
+
+      // Build service using credentials
+      let localServiceAccountJson: string | undefined;
+      try { localServiceAccountJson = localStorage.getItem('serviceAccountJson') || undefined; } catch {}
+      const sheetService = new GoogleSheetsService({
+        apiKey: credentials.googleApiKey || '',
+        serviceAccountJson: credentials.googleServiceAccountJson || localServiceAccountJson,
+        sheetId: credentials.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || '',
+        worksheetNames: credentials.worksheetNames,
+        columnMappings: credentials.columnMappings,
+      });
+
+      if (!controller.signal.aborted && mountedRef.current) {
+        setService(sheetService);
+        
+        // Load users (SWR: show cache, then refresh)
+        try {
+          const cachedUsers = await cacheGet<any[]>("crm_users_cache_v1", 10 * 60 * 1000);
+          if (cachedUsers && mountedRef.current) setUsers(cachedUsers);
+
+          const usersData = await sheetService.fetchUsers();
+          if (!controller.signal.aborted && mountedRef.current) {
+            setUsers(usersData);
+            // Cache fresh users
+            await cacheSet("crm_users_cache_v1", usersData);
+          }
+        } catch (err) {
+          console.error("Failed to load users:", err);
+          if (!controller.signal.aborted && mountedRef.current) {
+            setError("Failed to load users");
+          }
+        }
+        
+        if (mountedRef.current) {
+          setLoading(false);
+        }
       }
-      if (!serviceAccountJson)
-        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+    } catch (err) {
+      console.error("Failed to initialize sheet service:", err);
+      if (!controller.signal.aborted && mountedRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to initialize service");
+        setLoading(false);
+      }
     }
-    const range = `${normalizedSheet}`;
-    const token = await getAccessToken(serviceAccountJson);
-    console.log(`✅ Appending to sheet: ${normalizedSheet}`);
-    console.log('✅ Using Service Account for Sheets write operation');
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(
-      range
-    )}:append?valueInputOption=USER_ENTERED`;
-    const headers: Headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ values: [row] }) });
-    if (!res.ok) throw new Error(await res.text());
-  };
+  }, [toast]);
 
-  const getRows = async (sheetName: string, _range?: string): Promise<CellValue[][]> => {
-    if (!sheetName) throw new Error('Missing sheet name for read operation.');
-    const normalizedSheet = normalizeSheetName(
-      (() => {
-        const key = sheetName.toLowerCase();
-        if (key === 'users') return 'Users';
-        if (key === 'blackboard') return 'Blackboard';
-        if (key === 'notifications' || key === 'notification') return 'Notification';
-        return sheetName;
-      })()
-    );
-    const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(normalizedSheet)}${
-      !serviceAccountJson && apiKey ? `?key=${apiKey}` : ''
-    }`;
-    const headers = await authHeaders();
-    const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    let values: CellValue[][] = (data.values || []) as CellValue[][];
-    if (values.length > 1) values = values.slice(1); // ✅ Skip header row universally
-    return values;
-  };
+  const refreshUsers = useCallback(async () => {
+    if (!service) return;
 
-  const batchUpdateCells = async (
-    sheetName: string,
-    cells: Array<{ row: number; column: number; value: CellValue }>
-  ) => {
-    if (!sheetName) throw new Error('Missing sheet name for update operation.');
-    if (!cells || cells.length === 0) return;
-    const normalizedSheet = normalizeSheetName(
-      (() => {
-        const key = sheetName.toLowerCase();
-        if (key === 'users') return 'Users';
-        if (key === 'blackboard') return 'Blackboard';
-        if (key === 'notifications' || key === 'notification') return 'Notification';
-        return sheetName;
-      })()
-    );
-    if (!serviceAccountJson) {
-      console.error('⚠️ Service Account JSON missing, using localStorage fallback');
-      try {
-        serviceAccountJson = localStorage.getItem('serviceAccountJson') || undefined;
-      } catch (e) {
-        console.warn('Could not read service account from localStorage', e);
-      }
-      if (!serviceAccountJson) {
-        serviceAccountJson = (await readPersistedServiceAccountJson()) || undefined;
-      }
-      if (!serviceAccountJson)
-        throw new Error('Service Account JSON missing. Please re-enter in Admin Settings.');
+    // Cancel any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    const token = await getAccessToken(serviceAccountJson);
+    try {
+      const usersData = await service.fetchUsers();
+      if (!controller.signal.aborted && mountedRef.current) {
+        setUsers(usersData);
+      }
+    } catch (err) {
+      console.error("Failed to refresh users:", err);
+      if (!controller.signal.aborted && mountedRef.current) {
+        toast({
+          title: "Error",
+          description: "Failed to refresh users",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [service, toast]);
 
-    const data = cells.map(({ row, column, value }) => {
-      if (!row || row < 1) throw new Error('Row number must be >= 1 for batch update');
-      const columnLetter = columnIndexToLetter(column);
-      return {
-        range: `${normalizedSheet}!${columnLetter}${row}`,
-        values: [[value]],
-      };
-    });
+  useEffect(() => {
+    let mounted = true;
+    
+    const initialize = async () => {
+      if (mounted) {
+        await initializeService();
+      }
+    };
+    
+    mountedRef.current = true;
+    initialize();
 
-    console.log(`✅ Batch updating ${cells.length} cells in sheet: ${normalizedSheet}`);
-    const url = `${SHEETS_API_BASE}/${sheetId}/values:batchUpdate`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
-    });
-    if (!res.ok) throw new Error(await res.text());
+    return () => {
+      mounted = false;
+      mountedRef.current = false;
+      
+      // Cleanup abort controller
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [initializeService]);
+
+  return {
+    service,
+    users,
+    loading,
+    error,
+    refreshUsers,
   };
-
-  return { appendRow, getRows, batchUpdateCells };
 }

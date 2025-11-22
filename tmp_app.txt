@@ -1,0 +1,335 @@
+import { useEffect, useState } from "react";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import BottomNavigation from "@/components/BottomNavigation";
+import { Capacitor } from "@capacitor/core";
+import { SplashScreen } from "@capacitor/splash-screen";
+import { authService } from "@/lib/authService";
+import { notificationService } from "@/lib/notificationService";
+import { themeService } from "@/lib/themeService";
+import { setupOfflineSync } from "@/lib/offlineQueue";
+import Index from "./pages/Index";
+import Auth from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
+import Settings from "./pages/Settings";
+import NotificationsPage from "./pages/Notifications";
+import NotFound from "./pages/NotFound";
+import { stateManager } from "@/lib/stateManager";
+import { setLastRoute, getLastRoute } from "@/lib/routePersistence";
+import { useSheetService } from "@/hooks/useSheetService";
+import { notifyAdmin, notifyAll, notifyUser } from "@/utils/notifyTriggers";
+import { parseFlexibleDate } from "@/lib/dateUtils";
+import { SettingsProvider } from "@/lib/SettingsContext";
+import { ensureAppStorageStructure } from "@/lib/deviceStorage";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { persistState, restoreState } from "@/lib/storage";
+
+// ✅ NEW imports for offline-first sync
+import { useCRMData } from "@/hooks/useCRMData";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
+import OfflineIndicator from "@/components/OfflineIndicator";
+
+// ✅ NEW import for WebSocket notifications
+import { useWebSocketNotifications } from "@/hooks/useWebSocketNotifications";
+
+const queryClient = new QueryClient();
+
+function App() {
+  const [isReady, setIsReady] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  // ✅ Initialize CRM data hook once (global background sync)
+  const { isOnline } = useOfflineSync();
+  const { leads, loading: crmLoading, error: crmError, syncData } = useCRMData();
+
+  // ✅ Initialize WebSocket notifications globally
+  const { connectionStatus } = useWebSocketNotifications();
+
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        // Initialize services with error handling
+        await Promise.all([
+          ensureAppStorageStructure(),
+          themeService.initialize(),
+          setupOfflineSync()
+        ]);
+        
+        setIsReady(true);
+      } catch (error) {
+        console.error("App initialization error:", error);
+        setInitError(error instanceof Error ? error.message : "Failed to initialize app");
+        setIsReady(true); // Continue even if initialization fails
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  if (!isReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading Tripflow...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center max-w-md p-6">
+          <div className="text-destructive mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Initialization Error</h2>
+          <p className="text-muted-foreground mb-4">{initError}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Reload App
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <SettingsProvider>
+          <TooltipProvider>
+            <div className="min-h-screen bg-background">
+              <HashRouter>
+                <AppContent />
+              </HashRouter>
+              <Toaster />
+              <Sonner />
+            </div>
+          </TooltipProvider>
+        </SettingsProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+}
+
+export default App;
+
+function AppContent() {
+  const location = useLocation();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  // ✅ NEW hooks for offline-first sync
+  const { isOnline } = useOfflineSync();
+  const { leads, loading: crmLoading, error: crmError } = useCRMData();
+
+  // ✅ NEW hook for WebSocket notifications
+  const { connectionStatus } = useWebSocketNotifications();
+
+  const { users, loading: sheetLoading } = useSheetService();
+
+  // Handle authentication state changes (persisted session)
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const auth = await authService.checkAuth();
+        setIsAuthenticated(auth);
+        // Touch session timestamp on open for rolling expiry
+        if (auth) await authService.touchSession();
+      } catch (error) {
+        console.error("Error checking authentication:", error);
+        setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // Persist last route and handle route-specific effects
+  useEffect(() => {
+    try {
+      // Save current route for next launch
+      setLastRoute(location.pathname + (location.search || ""));
+      persistState('lastState', { route: location.pathname + (location.search || '') });
+
+      // Handle route-specific logic
+      if (location.pathname === "/dashboard" && isAuthenticated) {
+        // Reset dashboard filters when navigating to dashboard
+        stateManager.setFilters({});
+      }
+    } catch (error) {
+      console.error("Error handling route effects:", error);
+    }
+  }, [location.pathname, isAuthenticated]);
+
+  // Restore last route after bootstrap and auth
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!bootstrapped || isLoading) return;
+    if (!isAuthenticated) return;
+    const isAtRoot = location.pathname === "/" || location.pathname === "/auth";
+    if (isAtRoot) {
+      const saved = restoreState('lastState');
+      const last = saved?.route || getLastRoute();
+      if (last && last !== "/auth") {
+        try { navigate(last, { replace: true }); } catch {}
+      }
+    }
+  }, [bootstrapped, isLoading, isAuthenticated]);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        // Initialize app storage structure
+        await ensureAppStorageStructure();
+        
+        // Initialize theme
+        await themeService.initialize();
+        
+        // Setup offline sync
+        await setupOfflineSync();
+        
+        // Request notification permissions (deferred in App to avoid blocking render)
+        
+        // Hide splash screen after initialization
+        if (Capacitor.isNativePlatform()) {
+          await SplashScreen.hide();
+        }
+        
+        setBootstrapped(true);
+      } catch (error) {
+        console.error("Bootstrap error:", error);
+        setInitError(error instanceof Error ? error.message : "Failed to initialize app");
+        setBootstrapped(true); // Continue even if some services fail
+      }
+    };
+
+    bootstrap();
+    // Safety timeout: ensure we never block UI indefinitely
+    const timeout = window.setTimeout(() => {
+      if (!bootstrapped) {
+        console.warn('[AppContent] Bootstrap timeout; continue with cached mode');
+        setBootstrapped(true);
+      }
+    }, 57000);
+    const onOnline = () => {
+      try { syncData(false); } catch {}
+    };
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('online', onOnline);
+    };
+  }, []);
+
+  // Handle CRM notifications
+  useEffect(() => {
+    if (!bootstrapped || !leads.length) return;
+
+    const processCRMNotifications = async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (const lead of leads) {
+          const travelDate = lead.travelDate ? parseFlexibleDate(lead.travelDate) : null;
+          
+          if (travelDate) {
+            const daysDiff = Math.ceil((travelDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            
+            // Notify admin 3 days before travel
+            if (daysDiff === 3) {
+              await notifyAdmin(`Travel reminder: ${lead.travellerName} travels in 3 days`);
+            }
+            
+            // Notify all users 1 day before travel
+            if (daysDiff === 1) {
+              await notifyAll(`Travel reminder: ${lead.travellerName} travels tomorrow`);
+            }
+            
+            // Notify specific user 7 days before travel
+            if (daysDiff === 7 && lead.consultant) {
+              await notifyUser(lead.consultant, `Travel reminder: ${lead.travellerName} travels in 1 week`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error processing CRM notifications:", error);
+      }
+    };
+
+    processCRMNotifications();
+  }, [leads, bootstrapped]);
+
+  if (!bootstrapped) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading Tripflow...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pb-24 sm:pb-20 relative">
+      {/* ✅ Offline indicator for connection status */}
+      <OfflineIndicator />
+      
+      {/* ✅ Error indicator for CRM errors */}
+      {crmError && (
+        <div className="fixed top-4 right-4 z-50 bg-destructive text-destructive-foreground px-4 py-2 rounded-md flex items-center gap-3">
+          <span>{navigator.onLine ? 'Problem loading data' : "You're offline. Showing last saved data."}</span>
+          <button className="text-xs underline" onClick={() => syncData(false)}>Retry</button>
+        </div>
+      )}
+
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            isAuthenticated ? 
+              <Dashboard /> : 
+              <Navigate to="/auth" replace />
+          } 
+        />
+        <Route 
+          path="/settings" 
+          element={
+            isAuthenticated ? 
+              <Settings /> : 
+              <Navigate to="/auth" replace />
+          } 
+        />
+        <Route 
+          path="/notifications" 
+          element={
+            isAuthenticated ? 
+              <NotificationsPage /> : 
+              <Navigate to="/auth" replace />
+          } 
+        />
+        <Route path="/404" element={<NotFound />} />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Routes>
+      
+      {isAuthenticated && <BottomNavigation />}
+    </div>
+  );
+}

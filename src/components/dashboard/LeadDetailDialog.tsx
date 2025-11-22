@@ -1,8 +1,11 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { SheetLead } from "@/lib/googleSheets";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, TrendingUp, Users as UsersIcon, Calendar } from "lucide-react";
+import { MapPin, TrendingUp, Users as UsersIcon, Calendar, X } from "lucide-react";
+import { emitGlobalPopupOpen, emitGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 interface LeadDetailDialogProps {
   open: boolean;
@@ -12,7 +15,61 @@ interface LeadDetailDialogProps {
   color: string;
 }
 
+const STATE_LIST = [
+  "KERALA",
+  "RAJASTHAN", 
+  "UTTARAKHAND",
+  "HIMACHAL PRADESH",
+  "KASHMIR",
+  "ODISHA",
+  "BHUTAN",
+  "NORTH EAST",
+  "KARNATAKA",
+  "TAMIL NADU",
+  "GOA",
+  "NEPAL",
+  "ANDAMAN",
+  "UTTAR PRADESH",
+  "CHARDHAM",
+  "LAKSHADWEEP",
+  "GOLDEN TRIANGLE",
+  "THAILAND",
+  "MAHARASHTRA",
+  "DUBAI",
+  "GUJARAT",
+  "MEGHALAYA",
+  "DELHI",
+  "LEH",
+  "VIETNAM",
+  "BALI",
+  "ARUNACHAL PRADESH",
+  "ANDRA PRADESH",
+  "SINGAPORE",
+  "AZERBAIJAN",
+  "UNITED STATE",
+  "PUNJAB"
+];
+
 const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDialogProps) => {
+  useEffect(() => {
+    // Only emit popup events when dialog is fully open and interactive
+    // Add a small delay to ensure the dialog is actually rendered
+    if (open) {
+      const timer = setTimeout(() => {
+        emitGlobalPopupOpen();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      emitGlobalPopupClose();
+    }
+  }, [open]);
+
+  // Ensure popup state is closed when this component unmounts
+  useEffect(() => {
+    return () => {
+      emitGlobalPopupClose();
+    };
+  }, []);
   
   // Group leads by state
   const leadsByState = useMemo(() => {
@@ -70,16 +127,31 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
   const maxMonthCount = Math.max(...monthlyTrend.map(m => m.count), 1);
   const maxStateCount = Math.max(...leadsByState.map(s => s.count), 1);
 
+  const PIE_COLORS = [
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+    'hsl(var(--chart-6))',
+    'hsl(var(--chart-7))',
+    'hsl(var(--chart-8))',
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="sticky top-0 bg-background z-10 pb-4">
+      <DialogContent className="w-[95vw] sm:max-w-6xl max-h-[85vh] flex flex-col mx-auto">
+        <DialogHeader className="flex-shrink-0 pb-4">
           <DialogTitle className={`text-2xl ${color}`}>
             {title} - Detailed Analytics ({leads.length} leads)
           </DialogTitle>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-6 flex-1 overflow-y-auto pb-20">
           
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -124,7 +196,7 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
             </Card>
           </div>
 
-          {/* Monthly Trend Bar Chart */}
+          {/* Monthly Trend Graph */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -133,33 +205,40 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {monthlyTrend.map(({ month, count }) => (
-                  <div key={month} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{month}</span>
-                      <span className="text-muted-foreground">{count} leads</span>
-                    </div>
-                    <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
-                      <div
-                        className="h-full transition-all duration-500 flex items-center justify-end pr-2"
-                        style={{ width: `${(count / maxMonthCount) * 100}%`, background: '#10B981' }}
-                      >
-                        {count > 0 && (
-                          <span className="text-xs font-bold text-white">{count}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {monthlyTrend.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">No data available</p>
-                )}
-              </div>
+              {monthlyTrend.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={monthlyTrend} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))', 
+                        borderRadius: '8px' 
+                      }}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="count" 
+                      fill="hsl(var(--primary))"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
-          {/* Leads by State (Horizontal Bar Chart) */}
+          {/* Leads by State Graph */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -168,28 +247,40 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {leadsByState.map(({ state, count }) => (
-                  <div key={state} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{state}</span>
-                      <span className="text-muted-foreground">{count} leads ({((count / leads.length) * 100).toFixed(1)}%)</span>
-                    </div>
-                    <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
-                      <div
-                        className="h-full transition-all duration-500 flex items-center justify-end pr-2"
-                        style={{ width: `${(count / maxStateCount) * 100}%`, background: '#10B981' }}
-                      >
-                        <span className="text-xs font-bold text-white">{count}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {leadsByState.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={leadsByState.map(s => ({ name: s.state, count: s.count }))} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))', 
+                        borderRadius: '8px' 
+                      }}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="count" 
+                      fill="hsl(var(--primary))"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
-          {/* Leads by Status */}
+          {/* Status Breakdown Graph */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -198,22 +289,36 @@ const LeadDetailDialog = ({ open, onClose, title, leads, color }: LeadDetailDial
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {leadsByStatus.map(({ status, count }) => (
-                  <div key={status} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{status}</span>
-                      <span className="text-muted-foreground">{count} leads ({((count / leads.length) * 100).toFixed(1)}%)</span>
-                    </div>
-                    <div className="h-6 rounded-lg overflow-hidden" style={{ background: '#E0F2F1' }}>
-                      <div
-                        className="h-full transition-all duration-500"
-                        style={{ width: `${(count / leads.length) * 100}%`, background: '#10B981' }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {leadsByStatus.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={leadsByStatus.map(s => ({ name: s.status, count: s.count }))} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))', 
+                        borderRadius: '8px' 
+                      }}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="count" 
+                      fill="hsl(var(--primary))"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
