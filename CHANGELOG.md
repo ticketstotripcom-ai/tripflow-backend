@@ -1,5 +1,34 @@
 # TTT CRM - Changelog
 
+## Version 1.4.8 - Mobile Responsiveness Fixes by Gemini (November 24, 2025)
+
+### 📱 Mobile Responsiveness
+
+#### 1. Notification Panel Overflow Fixed
+- **Problem**: The notification panel was overflowing and going off-screen on mobile devices.
+- **Root Cause**: Complex JavaScript-based positioning logic in `NotificationBell.tsx` was not reliably calculating the panel's position and size on different viewport sizes.
+- **Solution (by Gemini)**:
+  - Replaced the dynamic JavaScript positioning with a more robust and performant CSS-first approach.
+  - The notification panel now uses responsive Tailwind CSS classes to control its size and position.
+    - On mobile, it's a full-width modal (`w-[95vw]`).
+    - On desktop, it's a dropdown with a fixed width (`sm:w-96`).
+  - Added a `useEffect` hook to disable body scroll when the notification panel is open, improving the user experience.
+- **Impact**: The notification panel is now fully responsive and no longer overflows on mobile screens. The new implementation is simpler and more maintainable.
+- **Files Affected**: `src/components/notifications/NotificationBell.tsx`
+
+#### 2. Global Horizontal Scroll Disabled
+- **Problem**: The application was prone to horizontal scrolling on mobile devices, leading to a poor user experience.
+- **Root Cause**: Some elements were breaking out of their containers, causing the viewport to overflow.
+- **Solution (by Gemini)**:
+  - Enforced `overflow-x: hidden !important;` on the `html`, `body`, and `#root` elements in `src/index.css`.
+- **Impact**: Horizontal scrolling is now completely disabled across the application, ensuring a stable and consistent layout on mobile devices.
+- **Files Affected**: `src/index.css`
+
+### ✍️ Authored by
+- Gemini
+
+---
+
 ## Version 1.4.0 - Critical Bug Fixes & UI Enhancements (November 17, 2025)
 
 ### 🚨 Critical Fixes
@@ -110,7 +139,7 @@ This update resolves all critical functionality issues reported by users while e
 
 **Files Modified**: 12+ core components and utilities
 **Issues Resolved**: 8+ critical bugs and enhancement requests
-**Build Status**: ✅ Production-ready
+- **Build Status**: ✅ Production-ready
 
 ---
 
@@ -364,3 +393,55 @@ This update resolves all critical functionality issues reported by users while e
 - **Data Quality**: Standardized destination names and passenger type selections
 - **Mobile UX**: Touch-friendly dropdowns work seamlessly on all devices
 - **Workflow Efficiency**: Faster lead creation with predefined options
+## Version 1.4.7 - Call Tracking + Mobile Notifications (November 22, 2025)
+
+### ✅ Call Tracker: Always-On, Offline-First, CRM-Only
+
+- Always-on background tracking on Android via receivers and service
+  - Added phone state receiver to start tracker when calls occur
+  - Added boot receiver to start tracker after device reboot
+  - Declared service and required permissions
+  - Files: `android/app/src/main/AndroidManifest.xml:59-81`, `android/app/src/main/java/com/myapp/calltracker/PhoneStateReceiver.kt:1`, `android/app/src/main/java/com/myapp/calltracker/BootReceiver.kt:1`, `android/app/src/main/java/com/myapp/calltracker/CallStateService.kt:21-31`
+- Persist only matched business calls to Master Data
+  - Matches call events by number to existing leads
+  - Writes to column K (remarks) and appends the same summary to K cell note
+  - Unmatched (personal) calls are stored locally only and not listed in Master Data
+  - Files: `src/App.tsx:111-172`, `src/lib/googleSheets.ts:634-687,690-854`, `src/services/db.ts:12-20`
+- Offline-first sync for matched calls
+  - Queues updates when offline and processes on reconnect
+  - Files: `src/App.tsx:143-154`, `src/lib/offlineQueue.ts:31-57`
+
+### 🔔 Mobile Notification Surfaces
+
+- Heads-up/status-bar/local notifications configured for native
+  - High-importance channel, public visibility, sound
+  - Files: `src/lib/nativeNotifications.ts:23-41,55-67`
+- WebSocket messages also trigger a local notification on devices
+  - Files: `src/hooks/useWebSocketNotifications.tsx:104-112`
+- Icons and badge paths updated
+  - Files: `src/lib/nativeNotifications.ts:37-45`
+
+### 🔧 Notifications UX Fixes
+
+- Bell dropdown clipping and overflow fixed with portal + viewport clamping
+  - Files: `src/components/notifications/NotificationBell.tsx`
+- Notification sound path standardized to `public/sounds/notify.wav`
+  - Files: `src/lib/nativeNotifications.ts:27-35`
+
+### 🎨 Lead Card Readability & Logging
+
+- Default background switched to navy/gray gradient with text shadow
+  - Files: `src/components/dashboard/LeadCard.tsx:76-92,135-141,316-318`
+- Buttons standardized to blue; reassign label logic updated
+  - Files: `src/components/dashboard/LeadCard.tsx`
+- Manual Call/Email/WhatsApp actions append to K and K cell note
+  - Files: `src/components/dashboard/LeadCard.tsx:164-171`
+
+### 🎛️ Filters
+
+- Date range trigger standardized to match other filters
+  - Files: `src/components/ui/date-range-picker.tsx`
+
+### 🧪 Build
+
+- Build OK: `npm run build` (Nov 22, 2025)

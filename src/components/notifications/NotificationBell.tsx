@@ -9,9 +9,6 @@ const NotificationBell = () => {
   const { unreadCount } = useNotificationsContext();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [panelRight, setPanelRight] = useState<number>(8);
-  const [panelTop, setPanelTop] = useState<number>(0);
-  const [panelWidth, setPanelWidth] = useState<number>(320);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -24,24 +21,20 @@ const NotificationBell = () => {
   }, []);
 
   useEffect(() => {
-    const updatePosition = () => {
-      const el = wrapperRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const safeMargin = 8;
-      const width = Math.min(320, Math.max(240, window.innerWidth - safeMargin * 2));
-      setPanelWidth(width);
-      setPanelRight(Math.max(safeMargin, window.innerWidth - rect.right));
-      setPanelTop(Math.round(Math.min(rect.bottom + 8, window.innerHeight - 8)));
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
     };
     if (open) {
-      updatePosition();
-      window.addEventListener("scroll", updatePosition, { passive: true });
-      window.addEventListener("resize", updatePosition);
+      document.body.style.overflow = "hidden";
+      document.addEventListener("keydown", closeOnEscape);
+    } else {
+      document.body.style.overflow = "";
     }
     return () => {
-      window.removeEventListener("scroll", updatePosition as any);
-      window.removeEventListener("resize", updatePosition as any);
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
 
@@ -58,8 +51,8 @@ const NotificationBell = () => {
       {open &&
         createPortal(
           <div
-            className="fixed bg-background border rounded-lg shadow-lg z-[9999]"
-            style={{ right: panelRight, top: panelTop, width: panelWidth, maxHeight: `calc(100vh - ${Math.max(96, panelTop + 24)}px)` }}
+            className="fixed inset-x-0 top-16 mx-auto w-[95vw] max-w-md bg-background border rounded-lg shadow-lg z-[9999] sm:absolute sm:top-full sm:right-0 sm:left-auto sm:w-96 sm:mt-2 sm:mx-0"
+            style={{ maxHeight: "calc(100vh - 5rem)" }}
           >
             <NotificationList onClose={() => setOpen(false)} />
           </div>,
