@@ -2,6 +2,7 @@
 // One row = one notification for one user; rows are deleted when read.
 import { GoogleSheetsService } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
+import { openDB } from "idb";
 
 export type NotificationType = "push" | "in-app" | "local" | "heads-up" | "badge" | "message";
 export type NotificationPriority = "low" | "normal" | "high";
@@ -142,6 +143,85 @@ async function appendRows(svc: GoogleSheetsService, rows: (string | number | nul
   }
 }
 
+// Ensure sheet capacity stays within safe bounds to avoid workbook cell limits
+const MAX_NOTIFICATION_ROWS = 9000; // keep under ~10M cells across workbook
+const TRIM_TO_ROWS = 7000;
+
+async function ensureCapacity(svc: GoogleSheetsService) {
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${(svc as any).config.sheetId}/values/${encodeURIComponent(
+      NOTIFICATIONS_SHEET
+    )}`;
+    const token = await (svc as any).getAccessToken?.();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      throw new Error(`Failed to get sheet row count: ${res.statusText}`);
+    }
+    const data = await res.json();
+    const rows: any[] = data.values || [];
+    const count = Math.max(0, rows.length - 1); // exclude header
+
+    if (count > MAX_NOTIFICATION_ROWS) {
+      const deleteCount = Math.max(0, count - TRIM_TO_ROWS);
+      if (deleteCount > 0) {
+        // Clear a range of old notifications instead of deleting rows
+        const clearRange = `${NOTIFICATIONS_SHEET}!A2:O${deleteCount + 1}`;
+        const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${(svc as any).config.sheetId}/values/${encodeURIComponent(clearRange)}:clear`;
+        
+        const clearRes = await fetch(clearUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+
+        if (!clearRes.ok) {
+          throw new Error(`Failed to clear old notifications: ${await clearRes.text()}`);
+        }
+        console.log(`[notificationService] Cleared ${deleteCount} old notification rows.`);
+      }
+    }
+  } catch (err) {
+    console.error('[notificationService] ensureCapacity failed:', err);
+    throw err; // Re-throw the error to be handled by the caller
+  }
+}
+
+async function writeOffline(items: NewNotificationInput | NewNotificationInput[]) {
+  const list = Array.isArray(items) ? items : [items];
+  try {
+    const db = await openDB("notifications-db", 1, {
+      upgrade(d) {
+        if (!d.objectStoreNames.contains("notifications")) {
+          d.createObjectStore("notifications", { keyPath: "internalId" });
+        }
+      },
+    });
+    const tx = db.transaction("notifications", "readwrite");
+    const store = tx.objectStore("notifications");
+    for (const input of list) {
+      const now = input.timestamp || new Date().toISOString();
+      const id = input.internalId || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await store.put({
+        internalId: id,
+        id,
+        createdAt: now,
+        title: input.title,
+        message: input.message,
+        read: false,
+        userEmail: input.userEmail,
+        route: input.route,
+        sourceSheet: input.sourceSheet,
+        targetTravellerName: input.targetTravellerName,
+        targetDateTime: input.targetDateTime,
+        targetTripId: input.targetTripId,
+        type: input.type || input.notificationType || "message",
+      });
+    }
+    await tx.done;
+  } catch {}
+}
+
 async function deleteRow(svc: GoogleSheetsService, rowIndex1Based: number) {
   if (rowIndex1Based < 2) return; // never delete header
   const sheetId = await getSheetId(svc);
@@ -211,34 +291,11 @@ export async function markNotificationRead(notification: Notification | string):
 
 export async function createNotification(input: NewNotificationInput): Promise<void> {
   if (!input.userEmail) return;
-  const svc = await buildSheetService();
-  const now = input.timestamp || new Date().toISOString();
-  const row: (string | number | null)[] = [
-    now,
-    input.sourceSheet,
-    input.title,
-    input.message,
-    input.roleTarget,
-    "Unread",
-    input.userEmail.toLowerCase(),
-    input.route || "",
-    input.targetTravellerName || "",
-    input.targetDateTime || "",
-    input.targetTripId || "",
-    input.notificationType || input.type || "",
-    input.priority || "",
-    input.nextAction || "",
-    input.internalId || "",
-  ];
-  await appendRows(svc, [row]);
-}
-
-export async function createNotifications(inputs: NewNotificationInput[]): Promise<void> {
-  if (!inputs.length) return;
-  const svc = await buildSheetService();
-  const rows = inputs.map((input) => {
+  try {
+    const svc = await buildSheetService();
+    await ensureCapacity(svc);
     const now = input.timestamp || new Date().toISOString();
-    return [
+    const row: (string | number | null)[] = [
       now,
       input.sourceSheet,
       input.title,
@@ -254,7 +311,42 @@ export async function createNotifications(inputs: NewNotificationInput[]): Promi
       input.priority || "",
       input.nextAction || "",
       input.internalId || "",
-    ] as (string | number | null)[];
-  });
-  await appendRows(svc, rows);
+    ];
+    await appendRows(svc, [row]);
+  } catch (e) {
+    console.warn(`[notificationService] Could not create notification online, writing to offline store. Error: ${e}`);
+    await writeOffline(input);
+  }
+}
+
+export async function createNotifications(inputs: NewNotificationInput[]): Promise<void> {
+  if (!inputs.length) return;
+  try {
+    const svc = await buildSheetService();
+    await ensureCapacity(svc);
+    const rows = inputs.map((input) => {
+      const now = input.timestamp || new Date().toISOString();
+      return [
+        now,
+        input.sourceSheet,
+        input.title,
+        input.message,
+        input.roleTarget,
+        "Unread",
+        input.userEmail.toLowerCase(),
+        input.route || "",
+        input.targetTravellerName || "",
+        input.targetDateTime || "",
+        input.targetTripId || "",
+        input.notificationType || input.type || "",
+        input.priority || "",
+        input.nextAction || "",
+        input.internalId || "",
+      ] as (string | number | null)[];
+    });
+    await appendRows(svc, rows);
+  } catch (e) {
+    console.warn(`[notificationService] Could not create notifications online, writing to offline store. Error: ${e}`);
+    await writeOffline(inputs);
+  }
 }

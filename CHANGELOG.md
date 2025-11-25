@@ -1,5 +1,148 @@
 # TTT CRM - Changelog
 
+## Version 1.5.4 - Stability & Notifications by Trae (November 25, 2025)
+
+### Fixes
+
+- Lead Details crash resolved. Imported `useEffect` in `src/components/SnoozeOptionsDialog.tsx` to fix `ReferenceError: useEffect is not defined` when opening lead detail.
+- Notification sound added. Played `/sounds/notify.wav` and vibration on each local notification. Implemented in `src/lib/nativeNotifications.ts` so web and Android both cue audio.
+- Notification list populated. Change-detection notifications are now persisted to Google Sheets so the Notifications page shows entries. Implemented in `src/hooks/useCRMData.tsx` using `services/notificationService.createNotification`.
+- Prevented Google Sheets over-capacity errors by trimming old rows before appending new notifications. Implemented in `src/services/notificationService.ts` with `ensureCapacity()`.
+- Avoided native crash after enabling push by guarding plugin availability and credentials. Implemented in `src/lib/nativePush.ts`.
+- Switched notification icons to PNGs from `public/icons` for web notifications and removed native icon fields to prevent Android crashes due to missing drawable resources. Implemented in `src/lib/nativeNotifications.ts`.
+- Removed native sound field and rely on in-app audio playback to prevent post-permission crashes caused by missing `res/raw` assets. Implemented in `src/lib/nativeNotifications.ts`.
+- Native push toggle hardened. Added guards to avoid app crash when enabling native push on devices without proper Firebase setup. Implemented in `src/lib/nativePush.ts` with plugin availability and credential checks.
+
+### Author
+
+- Trae
+
+---
+
+## Version 1.5.3 - Advanced Notification Features by Gemini (November 24, 2025)
+
+### ✨ New Features
+
+#### 1. Smart Notification Grouping
+- **Problem**: Receiving many individual notifications for similar events (like new leads) could be noisy and overwhelming.
+- **Solution (by Gemini)**: Implemented notification grouping (also known as stacking).
+  - The `triggerNativeNotification` service now assigns a `group` to each notification based on its type (e.g., 'new_trip', 'follow_up').
+  - Android devices will now automatically stack these notifications into a single, expandable summary alert (e.g., "3 new follow-up reminders").
+- **Impact**: The user's notification shade is significantly cleaner, and they can grasp the volume of updates at a single glance.
+
+#### 2. Interactive Reminder Actions
+- **Problem**: Acting on a reminder notification required opening the app and finding the lead.
+- **Solution (by Gemini)**: Added interactive buttons directly to reminder notifications.
+  - When a user receives a "Follow-Up Reminder," the notification now includes **"Snooze 1hr"** and **"Mark as Done"** buttons.
+  - Tapping "Snooze 1hr" will automatically re-schedule the same notification for one hour later.
+  - The "Mark as Done" functionality is stubbed and ready for future implementation to update the lead status.
+- **Impact**: Users can manage their reminders directly from their lock screen or notification shade, enabling a much faster and more efficient workflow.
+
+### 🔧 Technical Improvements
+
+- **Action Registration**: Created a `registerNotificationActions` function in `App.tsx` to ensure the new interactive actions are available to the operating system on app startup.
+- **Event Listeners**: Added a global listener for `localNotificationActionPerformed` to handle taps on the new action buttons.
+
+### ✍️ Authored by
+- Gemini
+
+---
+## Version 1.5.2 - Build Fixes & Refactoring by Gemini (November 24, 2025)
+
+### 🔧 Technical Improvements & Build Fixes
+
+#### 1. Build Failure due to Missing File
+- **Problem**: The `npm run build` command was failing because it could not find `src/utils/diffLeads.ts`.
+- **Root Cause**: The file was deleted in a previous step, but a hook (`useCRMData.tsx`) still depended on it.
+- **Solution (by Gemini)**:
+  - Restored the `src/utils/diffLeads.ts` file to resolve the import error.
+
+#### 2. Build Failure due to Deprecated Functions
+- **Problem**: The build was failing because components were trying to import `scheduleLocalAt`, `showLocalNotification`, and `playNotificationSound` from `src/lib/nativeNotifications.ts`, which were removed during refactoring.
+- **Root Cause**: The `ReminderDialog.tsx` and `NotificationContext.tsx` components were still using the old, deprecated notification functions.
+- **Solution (by Gemini)**:
+  - Modified `src/lib/nativeNotifications.ts` to add scheduling capabilities to the new `triggerNativeNotification` function.
+  - Refactored `ReminderDialog.tsx` to use the centralized `triggerNativeNotification` function, passing a `scheduleAt` date for future reminders.
+  - Refactored `NotificationContext.tsx` to also use the centralized `triggerNativeNotification` function, removing calls to the old, separate functions.
+- **Impact**: All build errors are resolved. The entire application now uses a single, consistent, and centralized service for all native local notifications, respecting user settings and providing a unified experience.
+
+### ✍️ Authored by
+- Gemini
+
+---
+## Version 1.5.1 - Notification Settings Accessibility by Gemini (November 24, 2025)
+
+### ⚙️ Accessibility & UX Improvements
+
+#### 1. Notification Settings Accessible to All Users
+- **Problem**: Previously, notification settings were only available on the admin-focused `Settings` page, making them inaccessible to consultant users.
+- **Root Cause**: The notification settings UI was integrated directly into `src/pages/Settings.tsx`, which is typically linked from a globally visible `AppHeader` "Settings" button that was conditionally rendered only for admin users (`session.user.role === 'admin'`).
+- **Solution (by Gemini)**:
+  - Created a new component, `src/components/UserPreferencesDialog.tsx`, to exclusively house user-specific preferences, including the "Detailed Notifications" card.
+  - Integrated this dialog into the `AppHeader.tsx`, making it accessible via a new dedicated button visible to *all* authenticated users (admin or consultant).
+  - Removed the duplicated "Detailed Notifications" card from `src/pages/Settings.tsx` to streamline the admin settings page and avoid redundancy.
+- **Impact**: All users can now easily access and configure their personal notification preferences, significantly improving the user experience and catering to different user roles effectively.
+
+### ✍️ Authored by
+- Gemini
+
+---
+
+## Version 1.5.0 - Dual Notification System by Gemini (November 24, 2025)
+
+### ✨ New Features
+
+#### 1. Dual Notification System
+- **Problem**: The app relied solely on real-time WebSocket notifications, which could be missed if the user was offline or the app was closed.
+- **Solution (by Gemini)**: Implemented a "Dual Notification" strategy that combines real-time updates with a reliable client-side change detection system.
+  - **Real-Time (WebSocket):** The existing WebSocket system provides instant notifications when the app is open and connected.
+  - **Change-Detection (Local):** The app now intelligently compares the list of leads before and after a data refresh. If it detects changes (like new leads, assignments, or booked trips) that occurred while the user was away, it generates a summary notification locally on the device.
+- **Impact**: Notifications are now both **fast** (real-time) and **reliable** (offline-proof), ensuring users never miss a critical update.
+
+#### 2. Configurable Notifications
+- **Problem**: Users had no control over which notifications they received.
+- **Solution (by Gemini)**: Added a "Detailed Notifications" section on the **Settings** page.
+  - Users can now individually enable or disable notifications for:
+    - New Trip Added
+    - Trip Assigned to Me
+    - Trip Booked
+    - Blackboard Posts
+    - Follow-Up Reminders
+  - Preferences are saved locally on the device.
+- **Impact**: Users have full control over their notification preferences, reducing noise and improving their focus.
+
+### 🔧 Technical Improvements
+
+#### 1. Centralized Native Notification Service
+- **Problem**: The logic for displaying native notifications was scattered and inconsistent.
+- **Solution (by Gemini)**: Refactored the native notification logic into a single, powerful, and centralized service (`lib/nativeNotifications.ts`).
+  - The new `triggerNativeNotification` function now handles all native notifications.
+  - It automatically checks user settings before displaying an alert.
+  - It consistently applies sound (`notify.wav`), a large icon (`app-icon-96.png`), and manages the app icon's badge count.
+- **Impact**: All notifications are now consistent, respect user settings, and are easier to maintain.
+
+### ✍️ Authored by
+- Gemini
+
+---
+
+## Version 1.4.9 - Build Fix by Gemini (November 24, 2025)
+
+### 🔧 Technical Improvements
+
+#### 1. Build Failure Resolved
+- **Problem**: The `npm run build` command was failing with the error `"default" is not exported by "src/components/OfflineIndicator.tsx"`.
+- **Root Cause**: The `App.tsx` file was using a default import (`import OfflineIndicator from ...`) to import the `OfflineIndicator` component, but the component was exported using a named export (`export const OfflineIndicator = ...`).
+- **Solution (by Gemini)**:
+  - Corrected the import statement in `src/App.tsx` to use curly braces, changing it to a named import: `import { OfflineIndicator } from "@/components/OfflineIndicator";`.
+- **Impact**: The application now builds successfully without errors.
+- **Files Affected**: `src/App.tsx`
+
+### ✍️ Authored by
+- Gemini
+
+---
+
 ## Version 1.4.8 - Mobile Responsiveness Fixes by Gemini (November 24, 2025)
 
 ### 📱 Mobile Responsiveness
@@ -135,7 +278,7 @@
 
 ### 📝 Summary
 
-This update resolves all critical functionality issues reported by users while enhancing the overall user experience with a sophisticated travel-themed design system. The application now provides smooth scrolling, reliable WhatsApp integration, robust analytics handling, and a visually appealing interface that aligns with the travel industry aesthetic.
+This update resolves all critical functionality issues reported by users while enhancing the overall user experience with a- **sophisticated travel-themed design system**. The application now provides smooth scrolling, reliable WhatsApp integration, robust analytics handling, and a visually appealing interface that aligns with the travel industry aesthetic.
 
 **Files Modified**: 12+ core components and utilities
 **Issues Resolved**: 8+ critical bugs and enhancement requests
@@ -164,10 +307,10 @@ This update resolves all critical functionality issues reported by users while e
   - Added accessibility guards (`aria-disabled`, `tabIndex`) to prevent empty-state interactions (`src/components/dashboard/DashboardStats.tsx:151-159`)
 
 - Upcoming Trips and Hot Leads overflow on mobile
-  - Constrained dialog content with `overflow-x-hidden` and safe-area bottom padding (`src/components/dashboard/UpcomingTripsDialog.tsx:25`, `src/components/dashboard/HotLeadsDialog.tsx:60`)
+  - Constrained dialog content with `overflow-x: hidden` and safe-area bottom padding (`src/components/dashboard/UpcomingTripsDialog.tsx:25`, `src/components/dashboard/HotLeadsDialog.tsx:60`)
 
 - Customer Journey "Lost" overflow
-  - Added `overflow-x-hidden` to card content to keep bars within bounds (`src/components/dashboard/CustomerJourney.tsx:118`)
+  - Added `overflow-x: hidden` to card content to keep bars within bounds (`src/components/dashboard/CustomerJourney.tsx:118`)
 
 - Lead Details dialog sizing on small screens
   - Limited max width to `95vw` while preserving scroll (`src/components/dashboard/LeadDetailsDialog.tsx:216`)
@@ -264,7 +407,7 @@ This update resolves all critical functionality issues reported by users while e
 - **Root Cause**: Button text was using blue color theme (`text-blue-100`)
 - **Solution**: Updated reassign button text color from `text-blue-100` to `text-red-500` in LeadCard component
 - **Impact**: Reassign button now has red text color as requested
-- **Files Modified**: `src/components/dashboard/LeadCard.tsx:352`
+- **Files Affected**: `src/components/dashboard/LeadCard.tsx:352`
 
 #### 9. LeadCard Display Enhancement
 - **Problem**: When leads are not assigned to anyone, need to show "unassigned" and display destination from column I
@@ -274,7 +417,7 @@ This update resolves all critical functionality issues reported by users while e
   - Modified travel details to show destination from column I when unassigned, travel state when assigned
   - Added `destination` field to SheetLead interface and GoogleSheets service mapping
 - **Impact**: LeadCard now clearly shows assignment status and appropriate location information based on assignment state
-- **Files Modified**: `src/components/dashboard/LeadCard.tsx:272-280`, `src/lib/googleSheets.ts:529`, `src/lib/googleSheets.ts:63`
+- **Files Affected**: `src/components/dashboard/LeadCard.tsx:272-280`, `src/lib/googleSheets.ts:529`, `src/lib/googleSheets.ts:63`
 
 ### Overall Impact
 - **Functionality**: Lead assignment now works without showing false error messages
@@ -363,7 +506,7 @@ This update resolves all critical functionality issues reported by users while e
 #### 1. Travel State Dropdown Added
 - **Enhancement**: Replaced Travel State text input with dropdown containing 32 predefined destinations
 - **Implementation**: Added `TRAVEL_STATES` array with destinations: KERALA, RAJASTHAN, UTTARAKHAND, HIMACHAL PRADESH, KASHMIR, ODISHA, BHUTAN, NORTH EAST, KARNATAKA, TAMIL NADU, GOA, NEPAL, ANDAMAN, UTTAR PRADESH, CHARDHAM, LAKSHADWEEP, GOLDEN TRIANGLE, THAILAND, MAHARASHTRA, DUBAI, GUJARAT, MEGHALAYA, DELHI, LEH, VIETNAM, BALI, ARUNACHAL PRADESH, ANDRA PRADESH, SINGAPORE, AZERBAIJAN, UNITED STATE, PUNJAB
-- **Files Modified**: `src/components/dashboard/AddLeadDialog.tsx:37-45`
+- **Files Affected**: `src/components/dashboard/AddLeadDialog.tsx:37-45`
 - **Impact**: Users can now select travel destinations from a predefined list instead of typing manually
 
 #### 2. Pax Multi-Select Dropdown Added  
@@ -379,7 +522,7 @@ This update resolves all critical functionality issues reported by users while e
 #### 3. Form State Management Updated
 - **Enhancement**: Updated form data structure to handle array-based pax selection
 - **Implementation**: Changed `pax` field from string to string array, added `handlePaxChange` function for multi-select logic
-- **Files Modified**: `src/components/dashboard/AddLeadDialog.tsx:71, 81-88, 126`
+- **Files Affected**: `src/components/dashboard/AddLeadDialog.tsx:71, 81-88, 126`
 - **Impact**: Proper state management for multi-select dropdown functionality
 
 ### Technical Details
@@ -445,3 +588,17 @@ This update resolves all critical functionality issues reported by users while e
 ### 🧪 Build
 
 - Build OK: `npm run build` (Nov 22, 2025)
+## Version 1.5.5 - Notifications Stability by Trae (November 25, 2025)
+
+### Fixes
+
+- Prevented post-permission app crash by guarding LocalNotifications plugin availability and using safe numeric IDs. Implemented in `src/lib/nativeNotifications.ts`.
+- Corrected notification type mapping to match the "Notifications" sheet schema (uses `NotificationType` column). Implemented in `src/utils/notifications.ts`.
+- Ensured notification list shows items even when Google Sheets hits the 10,000,000-cell limit by writing to an offline store and merging in the bell popup. Implemented in `src/services/notificationService.ts` and `src/components/NotificationBell.tsx`.
+- Kept Android native scheduling minimal (no native icon/sound fields) and play PNG icons only on web notifications to avoid drawable/resource crashes.
+
+### Author
+
+- Trae
+
+---

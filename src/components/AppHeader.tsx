@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun, Settings, LogOut, Hand } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import UserPreferencesDialog from "@/components/UserPreferencesDialog"; // ✅ NEW import
 import { useWebSocketNotifications } from "@/hooks/useWebSocketNotifications";
 
 /* ---------------------------------------------------------
@@ -156,15 +157,16 @@ export default function AppHeader({
             <NotificationBell />
           </div>
 
-          {/* Swipe disabled globally */}
+          {/* ✅ User Preferences Dialog */}
+          <UserPreferencesDialog />
 
           {/* 🌙/☀️ Theme Toggle */}
           <Button variant="outline" size="icon" onClick={onToggleTheme} className="three-d-button">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          {/* ⚙ Settings */}
-          {onSettings && (
+          {/* ⚙ Settings (Admin only) */}
+          {session.user.role === 'admin' && onSettings && (
             <Button
               variant="outline"
               onClick={onSettings}

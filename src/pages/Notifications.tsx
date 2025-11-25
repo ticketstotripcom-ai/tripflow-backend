@@ -109,6 +109,7 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg sm:text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">Notifications</h2>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => window.sendTestNotification()}>Test Notification</Button>
             <Button variant="outline" size="sm" onClick={async () => {
               if (!sheetService) return;
               try {

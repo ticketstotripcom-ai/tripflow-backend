@@ -14,6 +14,7 @@ export interface AppNotification {
   targetDateTime?: string;
   targetTripId?: string;
   sourceSheet?: string;
+  scheduleAt?: Date; // ✅ NEW property for scheduled notifications
 }
 
 const NOTIFICATION_SHEET = 'Notifications';
@@ -21,19 +22,12 @@ const READ_COLUMN_INDEX = 5; // Zero-based index for column F (Read/Unread)
 
 const normalizeEmail = (value?: string) => String(value || '').trim().toLowerCase();
 
-// Support two schemas + optional deep-link columns:
-// A) Legacy (user's sheet):
-//   A: timestamp, B: source, C: title, D: message, E: role/target, F: read/unread, G: userEmail
-// B) App default:
-//   A: id, B: title, C: message, D: type, E: createdAt, F: TRUE/FALSE, G: userEmail
 const mapRowToNotification = (row: any[], index: number): AppNotification | null => {
   if (!row || row.length === 0) return null;
-  // Determine schema by checking if column C has a title-like value
-  const hasUserSchema = Boolean(String(row[2] ?? '').trim());
-  const createdAt = String((hasUserSchema ? row[0] : row[4]) ?? '').trim();
-  const title = String((hasUserSchema ? row[2] : row[1]) ?? '').trim();
-  const message = String((hasUserSchema ? row[3] : row[2]) ?? '').trim();
-  const type = String((hasUserSchema ? row[4] : row[3]) ?? 'general').trim() as AppNotification['type'];
+  const createdAt = String(row[0] ?? '').trim();
+  const title = String(row[2] ?? '').trim();
+  const message = String(row[3] ?? '').trim();
+  const type = String(row[11] ?? 'general').trim() as AppNotification['type'];
   const readRaw = String(row[5] ?? '').trim().toLowerCase();
   const readFlag = readRaw === 'true' || readRaw === 'read' || readRaw === 'yes' || readRaw === '1';
   const userEmail = String(row[6] ?? '').trim() || undefined;
@@ -41,7 +35,7 @@ const mapRowToNotification = (row: any[], index: number): AppNotification | null
   const targetTravellerName = String(row[8] ?? '').trim() || undefined;
   const targetDateTime = String(row[9] ?? '').trim() || undefined;
   const targetTripId = String(row[10] ?? '').trim() || undefined;
-  const id = (hasUserSchema ? `${createdAt}|${userEmail || ''}|${title}` : String(row[0] || '').trim()) || `${Date.now()}|${index}`;
+  const id = `${createdAt}|${userEmail || ''}|${title}` || `${Date.now()}|${index}`;
   return {
     id,
     title,
@@ -54,7 +48,7 @@ const mapRowToNotification = (row: any[], index: number): AppNotification | null
     targetTravellerName,
     targetDateTime,
     targetTripId,
-    sheetRowNumber: index + 2, // +2 because header row is removed in getRows helper
+    sheetRowNumber: index + 2,
   };
 };
 

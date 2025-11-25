@@ -6,14 +6,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { GoogleSheetsService, SheetLead } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
-import { Bell } from "lucide-react";
+import { Bell, Clock } from "lucide-react";
 import { formatDisplayDate } from "@/lib/dateUtils";
 import ReminderDialog from "./ReminderDialog";
+import SnoozeOptionsDialog from "../SnoozeOptionsDialog"; // ✅ NEW import
 import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
+import { notificationSettingsService } from "@/lib/notificationSettings"; // ✅ NEW import
 
 interface LeadDetailsDialogProps {
   lead: SheetLead;
@@ -102,17 +104,27 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
     ...lead,
     travelDate: dateToDDMMYYYY(lead.travelDate),
   });
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [showReminderDialog, setShowReminderDialog] = useState(false);
-  const [dateError, setDateError] = useState<string>("");
-  const { toast } = useToast();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [dateError, setDateError] = useState<string>("");
+  const { toast } = useToast();
+  const [isSnoozed, setIsSnoozed] = useState(false);
 
   useGlobalPopupClose(() => {
     if (open) {
       onClose();
     }
   }, open);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const snoozed = await notificationSettingsService.isLeadSnoozed(lead.tripId);
+        setIsSnoozed(!!snoozed);
+      } catch {}
+    })();
+  }, [lead.tripId]);
 
   const handleDateChange = (rawVal: string) => {
     const normalized = dateToDDMMYYYY(parseAnyDate(rawVal) || rawVal);
@@ -413,16 +425,25 @@ const LeadDetailsDialog = ({ lead, open, onClose, onUpdate, onImmediateUpdate }:
               </div>
             )}
 
-            <div className="border-t pt-4">
+            <div className="border-t pt-4 flex gap-2"> {/* Added flex gap */}
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setShowReminderDialog(true)}
-                className="w-full gap-2"
+                className="flex-1 gap-2" // Use flex-1 to distribute space
               >
                 <Bell className="h-4 w-4" />
-                Set Reminder for this Lead
+                Set Reminder {isSnoozed && <Clock className="h-4 w-4 text-red-500" />} {/* Show clock if snoozed */}
               </Button>
+              <SnoozeOptionsDialog
+                leadId={lead.tripId}
+                leadName={lead.travellerName}
+                onSnoozeComplete={() => setIsSnoozed(true)} // Update local state
+              >
+                 <Button type="button" variant="outline" className="flex-1 gap-2">
+                    <Clock className="h-4 w-4" /> {isSnoozed ? 'Unsnooze' : 'Snooze'}
+                 </Button>
+              </SnoozeOptionsDialog>
             </div>
           </div>
         </div>

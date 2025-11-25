@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home, LayoutDashboard } from "lucide-react";
+import { ArrowLeft, Home, LayoutDashboard, Inbox } from "lucide-react";
 import { stateManager } from "@/lib/stateManager";
 import { emitGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
 
@@ -62,7 +62,7 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
   return (
     <div className="bottom-nav bg-card/80 backdrop-blur-md shadow-soft" role="navigation" aria-label="Bottom navigation">
       <div className="container mx-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0)+0.75rem)]">
-        <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto justify-items-center">
+        <div className="grid grid-cols-4 gap-4 max-w-lg mx-auto justify-items-center">
           <Button
             variant="outline"
             size="icon"
@@ -89,6 +89,15 @@ const BottomNavigation = ({ onDashboardClick }: BottomNavigationProps) => {
             className="h-12 w-12 transition-transform hover:scale-105"
           >
             <LayoutDashboard className="h-5 w-5" />
+          </Button>
+          <Button
+            variant={location.pathname === "/action-center" ? "default" : "outline"}
+            size="icon"
+            aria-label="Action Center"
+            onClick={() => { emitGlobalPopupClose(); navigate("/action-center"); }}
+            className="h-12 w-12 transition-transform hover:scale-105"
+          >
+            <Inbox className="h-5 w-5" />
           </Button>
         </div>
       </div>

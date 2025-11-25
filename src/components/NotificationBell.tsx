@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { AppNotification, fetchNotifications, markNotificationsAsRead } from '@/utils/notifications';
+import { openDB } from 'idb';
 import { playSound, vibrate } from '@/utils/notifyHelpers';
 import { useSheetService } from '@/hooks/useSheetService';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -50,23 +51,63 @@ export default function NotificationBell({ user }: { user: { email?: string } })
     const load = async () => {
       try {
         const data = await fetchNotifications(sheetService, user?.email || '');
+        let offline: any[] = [];
+        try {
+          const db = await openDB('notifications-db', 1);
+          const tx = db.transaction('notifications', 'readonly');
+          const store = tx.objectStore('notifications');
+          offline = await store.getAll();
+        } catch {}
+        const combined = [...data, ...offline.map((o: any) => ({
+          id: String(o.id || o.internalId || Date.now()),
+          title: String(o.title || 'Notification'),
+          message: String(o.message || ''),
+          type: String(o.type || 'message') as any,
+          createdAt: String(o.createdAt || new Date().toISOString()),
+          read: !!o.read,
+          userEmail: String(user?.email || ''),
+          route: o.route,
+          targetTravellerName: o.targetTravellerName,
+          targetDateTime: o.targetDateTime,
+          targetTripId: o.targetTripId,
+        })) as AppNotification[];
         if (cancelled) return;
         setNotifications((prev) => {
           const previousIds = new Set(prev.map((n) => n.id));
-          const hasNew = data.some((n) => !previousIds.has(n.id));
-          if (hasNew && data.length > 0) {
+          const hasNew = combined.some((n) => !previousIds.has(n.id));
+          if (hasNew && combined.length > 0) {
             playSound();
             vibrate();
           }
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
           } catch (error) {
             console.warn('Failed to cache notifications:', error);
           }
-          return data;
+          return combined;
         });
       } catch (e) {
         console.warn('Failed to load notifications:', e);
+        try {
+          const db = await openDB('notifications-db', 1);
+          const tx = db.transaction('notifications', 'readonly');
+          const store = tx.objectStore('notifications');
+          const offline = await store.getAll();
+          const mapped = offline.map((o: any) => ({
+            id: String(o.id || o.internalId || Date.now()),
+            title: String(o.title || 'Notification'),
+            message: String(o.message || ''),
+            type: String(o.type || 'message') as any,
+            createdAt: String(o.createdAt || new Date().toISOString()),
+            read: !!o.read,
+            userEmail: String(user?.email || ''),
+            route: o.route,
+            targetTravellerName: o.targetTravellerName,
+            targetDateTime: o.targetDateTime,
+            targetTripId: o.targetTripId,
+          })) as AppNotification[];
+          setNotifications(mapped);
+        } catch {}
       }
     };
 

@@ -4,11 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
-import { Capacitor } from '@capacitor/core';
-import { scheduleLocalAt } from '@/lib/nativeNotifications';
+import { triggerNativeNotification } from '@/lib/nativeNotifications';
 import { useToast } from "@/hooks/use-toast";
 import { Bell } from "lucide-react";
 import { useGlobalPopupClose } from "@/hooks/useGlobalPopupClose";
+import type { AppNotification } from "@/utils/notifications";
 
 interface ReminderDialogProps {
   open: boolean;
@@ -28,14 +28,14 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
     if (open) onClose();
   }, open);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!date || !time) {
       toast({
         variant: "destructive",
         title: "Missing Information",
-        description: "Please select both date and time for the reminder",
+        description: "Please select both date and time for the reminder.",
       });
       return;
     }
@@ -45,58 +45,34 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
       toast({
         variant: "destructive",
         title: "Invalid Time",
-        description: "Reminder time must be in the future",
+        description: "Reminder time must be in the future.",
       });
       return;
     }
 
     onReminderSet({ date, time, message });
     
-    // Schedule notification
-    const now = new Date().getTime();
-    const reminderTime = reminderDateTime.getTime();
-    const delay = reminderTime - now;
+    // ✅ Schedule notification using the new centralized service
+    const notificationPayload: AppNotification = {
+      id: `reminder-${leadTripId}-${reminderDateTime.getTime()}`,
+      title: `Lead Reminder: ${leadName}`,
+      message: message || 'Follow up required.',
+      type: 'follow_up', // Use the 'follow_up' type so it can be configured in settings
+      createdAt: new Date().toISOString(),
+      read: false,
+      targetTripId: leadTripId,
+      targetTravellerName: leadName,
+      scheduleAt: reminderDateTime, // Set the future schedule date
+    };
 
-    if (delay > 0 && delay < 2147483647) { // Max setTimeout delay
-      setTimeout(() => {
-        try {
-          const platform = Capacitor.getPlatform();
-          if (platform === 'web') {
-            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-              new Notification('Lead Reminder', {
-                body: `${leadName} - ${message || 'Follow up required'}`,
-                icon: '/favicon.ico',
-              });
-            }
-            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDmH0fPTgjMGHm7A7+OZSA==');
-            audio.play().catch(() => {});
-          } else {
-            // Native local notification
-            scheduleLocalAt(new Date(reminderTime), 'Lead Reminder', `${leadName} - ${message || 'Follow up required'}`);
-          }
-        } catch {}
-        toast({ title: 'Reminder', description: `${leadName} - ${message || 'Follow up required'}` });
-      }, delay);
-    }
+    await triggerNativeNotification(notificationPayload);
 
     toast({
       title: "Reminder Set",
-      description: `You'll be notified on ${new Date(reminderDateTime).toLocaleString()}`,
+      description: `You'll be notified on ${reminderDateTime.toLocaleString()}`,
     });
 
     onClose();
-  };
-
-  // Request notification permission
-  const requestNotificationPermission = () => {
-    try {
-      const platform = Capacitor.getPlatform();
-      if (platform === 'web') {
-        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
-        }
-      }
-    } catch {}
   };
 
   return (
@@ -150,7 +126,6 @@ const ReminderDialog = ({ open, onClose, leadTripId, leadName, onReminderSet }: 
             </Button>
             <Button 
               type="submit" 
-              onClick={requestNotificationPermission}
               className="gap-2"
             >
               <Bell className="h-4 w-4" />

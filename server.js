@@ -3,17 +3,42 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { WebSocketServer } from 'ws';
+import admin from 'firebase-admin'; // ✅ NEW import for Firebase Admin SDK
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- Firebase Admin SDK Initialization ---
+let firebaseInitialized = false;
+const firebaseServiceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+if (firebaseServiceAccountJson) {
+  try {
+    const serviceAccount = JSON.parse(firebaseServiceAccountJson);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    firebaseInitialized = true;
+    console.log('✅ Firebase Admin SDK initialized for FCM.');
+  } catch (error) {
+    console.error('❌ Failed to initialize Firebase Admin SDK. Check FIREBASE_SERVICE_ACCOUNT_JSON:', error);
+  }
+} else {
+  console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_JSON not found. FCM push notifications will be disabled.');
+}
+
+// --- FCM Token Storage ---
+const fcmTokens = new Set(); // Stores unique FCM registration tokens
+
+
 // --- WebSocket Setup ---
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-function broadcast(data) {
+async function broadcast(data) {
   const payload = typeof data === 'string' ? data : JSON.stringify(data);
+  // 1. WebSocket broadcast
   wss.clients.forEach((client) => {
     if (client.readyState === 1) {
       try {
@@ -23,7 +48,49 @@ function broadcast(data) {
       }
     }
   });
-  console.log('Broadcasted to all clients:', payload);
+  console.log('Broadcasted to all WebSocket clients:', payload);
+
+  // 2. FCM Push Notification (if Firebase initialized and tokens available)
+  if (firebaseInitialized && fcmTokens.size > 0) {
+    const notificationPayload = {
+      title: data.title || 'Notification',
+      body: data.message || '',
+    };
+    
+    // FCM data payload must be string key-value pairs
+    const dataPayload = {};
+    for (const key in data) {
+      dataPayload[key] = String(data[key]);
+    }
+
+    const message = {
+      notification: notificationPayload,
+      data: dataPayload,
+      tokens: Array.from(fcmTokens), // send to all registered tokens
+    };
+
+    try {
+      const response = await admin.messaging().sendEachForMulticast(message);
+      console.log('FCM messages sent:', response.successCount, 'succeeded,', response.failureCount, 'failed.');
+
+      if (response.failureCount > 0) {
+        const failedTokens: string[] = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            failedTokens.push(message.tokens[idx]);
+            // Remove tokens that are no longer valid
+            if (resp.error?.code === 'messaging/invalid-registration-token' ||
+                resp.error?.code === 'messaging/registration-token-not-registered') {
+              fcmTokens.delete(message.tokens[idx]);
+              console.log('Removed invalid FCM token:', message.tokens[idx]);
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error sending FCM multicast message:', error);
+    }
+  }
 }
 
 wss.on('connection', (ws) => {
@@ -165,6 +232,24 @@ function handleBlackboardChanges(data) {
 app.get('/', (req, res) => {
   res.send('✅ Tripflow Backend is running!');
 });
+
+// Endpoint to register/unregister FCM tokens
+app.post('/api/fcm-token', validateSecret, (req, res) => {
+  const { token, action } = req.body; // action: 'register' or 'unregister'
+  if (!token) {
+    return res.status(400).json({ error: 'FCM token required' });
+  }
+
+  if (action === 'unregister') {
+    fcmTokens.delete(token);
+    console.log('FCM Token unregistered:', token);
+  } else { // default to register
+    fcmTokens.add(token);
+    console.log('FCM Token registered:', token);
+  }
+  res.json({ success: true, registeredTokens: fcmTokens.size });
+});
+
 
 // NEW Endpoint for Google Sheet `onEdit` trigger
 app.post('/api/sheet-edit', validateSecret, (req, res) => {

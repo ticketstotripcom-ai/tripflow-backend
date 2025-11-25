@@ -5,7 +5,7 @@ import {
   markNotificationRead,
 } from "@/services/notificationService";
 import { authService } from "@/lib/authService";
-import { showLocalNotification, playNotificationSound } from "@/lib/nativeNotifications";
+import { triggerNativeNotification } from "@/lib/nativeNotifications";
 
 interface NotificationContextValue {
   notifications: Notification[];
@@ -117,16 +117,34 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               return;
             }
           }
-          showLocalNotification(n).catch(() => {});
-          if (!settings.muteLowPriority || n.priority === "high") {
-            playNotificationSound(n).catch(() => {});
-          }
+          triggerNativeNotification(n).catch(() => {});
         });
       }
       setNotifications(visible);
       lastIdsRef.current = new Set(items.map((n) => n.id));
     } catch (err) {
       console.warn("[NotificationContext] Failed to refresh notifications", err);
+      try {
+        const { openDB } = await import("idb");
+        const db = await openDB("notifications-db", 1);
+        const tx = db.transaction("notifications", "readonly");
+        const store = tx.objectStore("notifications");
+        const offline = await store.getAll();
+        const mapped = offline.map((o: any) => ({
+          id: String(o.id || o.timestamp || Date.now()),
+          timestamp: new Date(o.createdAt || o.timestamp || Date.now()).toISOString(),
+          sourceSheet: "WS",
+          title: String(o.title || "Notification"),
+          message: String(o.message || o.text || ""),
+          roleTarget: "all",
+          read: !!o.read,
+          userEmail: sessionEmail,
+        })) as Notification[];
+        setNotifications(mapped);
+        lastIdsRef.current = new Set(mapped.map((n) => n.id));
+      } catch (e) {
+        console.warn("[NotificationContext] Failed to load offline notifications", e);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -157,12 +175,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (!sessionEmail) return;
     refreshNotifications();
+    const onHint = () => refreshNotifications();
+    window.addEventListener('sheet-notifications-refresh', onHint as any);
     if (pollerRef.current) clearInterval(pollerRef.current);
     pollerRef.current = setInterval(() => {
       refreshNotifications();
     }, POLL_INTERVAL_MS);
     return () => {
       if (pollerRef.current) clearInterval(pollerRef.current);
+      window.removeEventListener('sheet-notifications-refresh', onHint as any);
     };
   }, [sessionEmail, refreshNotifications]);
 

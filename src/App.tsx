@@ -19,6 +19,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Settings = lazy(() => import('./pages/Settings'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const ActionCenterPage = lazy(() => import('./pages/ActionCenter'));
 import { stateManager } from "@/lib/stateManager";
 import { setLastRoute, getLastRoute } from "@/lib/routePersistence";
 import { useSheetService } from "@/hooks/useSheetService";
@@ -36,17 +37,41 @@ import { NotificationProvider } from "@/context/NotificationContext";
 // ✅ NEW imports for offline-first sync
 import { useCRMData } from "@/hooks/useCRMData";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
-import OfflineIndicator from "@/components/OfflineIndicator";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+
+import { registerNotificationActions } from "@/lib/nativeNotifications";
 
 // ✅ NEW import for WebSocket notifications
 import { useWebSocketNotifications } from "@/hooks/useWebSocketNotifications";
 
+
 const queryClient = new QueryClient();
+
+declare global {
+  interface Window {
+    sendTestNotification: (message?: string) => void;
+  }
+}
 
 function App() {
   const [isReady, setIsReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [lastNotifiedIds, setLastNotifiedIds] = useState<Set<string>>(new Set());
+
+  // Expose a test function for notifications
+  window.sendTestNotification = (message?: string) => {
+    const ws = (window as any).__ws;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        title: "Test Notification",
+        message: message || "This is a test notification from the client.",
+      }));
+      console.log("Sent test notification.");
+    } else {
+      console.warn("WebSocket not connected.");
+    }
+  };
+
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -65,7 +90,8 @@ function App() {
         await Promise.all([
           ensureAppStorageStructure(),
           themeService.initialize(),
-          setupOfflineSync()
+          setupOfflineSync(),
+          registerNotificationActions(), // ✅ Register notification actions
         ]);
         console.log('[App] Core services initialized');
         
@@ -292,6 +318,7 @@ function AppContent() {
   const { leads, loading: crmLoading, error: crmError } = useCRMData();
 
   // ✅ Hook for WebSocket notifications (moved from App component)
+  const { connectionStatus: webSocketStatus } = useWebSocketNotifications();
   const { connectionStatus } = useWebSocketNotifications();
   const hybrid = useNotifications();
   const [lastNotifiedIds, setLastNotifiedIds] = useState<Set<string>>(new Set());
@@ -538,7 +565,7 @@ function AppContent() {
   return (
     <div className="pb-24 sm:pb-20 relative">
       {/* ✅ Offline indicator for connection status */}
-      <OfflineIndicator />
+      <OfflineIndicator webSocketStatus={webSocketStatus} />
       
       {/* ✅ Error indicator for CRM errors */}
       {crmError && (
@@ -564,12 +591,15 @@ function AppContent() {
           path="/settings" 
           element={renderProtectedRoute(<Settings />)} 
         />
-        <Route 
-          path="/notifications" 
-          element={renderProtectedRoute(<NotificationsPage />)} 
-        />
-        <Route path="/404" element={<NotFound />} />
-        <Route path="/lead/:leadId" element={<LeadDetailsDialog />} />
+                <Route
+                  path="/notifications"
+                  element={renderProtectedRoute(<NotificationsPage />)}
+                />
+                <Route
+                  path="/action-center"
+                  element={renderProtectedRoute(<ActionCenterPage />)}
+                />
+                <Route path="/404" element={<NotFound />} />        <Route path="/lead/:leadId" element={<LeadDetailsDialog />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
       

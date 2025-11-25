@@ -396,7 +396,11 @@ const AdminDashboard = ({ swipeEnabled }: AdminDashboardProps) => {
                   });
                 } catch (_) {}
                 // Persist to sheet for bell list
-                await notifyAdmin('Test Notification', 'Hello Admin, this is a test.', { route: '/dashboard?view=analytics' });
+                try {
+                  await notifyAdmin('Test Notification', 'Hello Admin, this is a test.', { route: '/dashboard?view=analytics' });
+                } catch (e) {
+                  console.warn('[AdminDashboard] Sheet append failed, check Settings > Google Sheets');
+                }
                 // Hint the bell to refresh immediately
                 window.dispatchEvent(new Event('sheet-notifications-refresh'));
                 toast({ title: 'Notification sent', description: 'Check the toast and bell.' });

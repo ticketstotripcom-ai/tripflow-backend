@@ -168,7 +168,7 @@ const Settings = () => {
             </div>
           </CardContent>
         </Card>
-
+        
         {/* Google Sheets Credentials */}
         <Card className="shadow-soft">
           <CardHeader>

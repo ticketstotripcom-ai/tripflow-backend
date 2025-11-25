@@ -13,11 +13,18 @@ type NotificationMeta = Partial<Pick<AppNotification, 'route' | 'targetTraveller
 export const notifyUser = async (email: string, title: string, message: string, type: AppNotification['type'] = 'general', meta?: NotificationMeta) => {
   try {
     const sheetService = await getSheetsServiceDirect();
-    await createNotification(sheetService, {
-      id: uuid(), title, message, type, createdAt: new Date().toISOString(),
-      read: false, userEmail: email,
-      route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
-    });
+    try {
+      await createNotification(sheetService, {
+        id: uuid(), title, message, type, createdAt: new Date().toISOString(),
+        read: false, userEmail: email,
+        route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
+      });
+    } catch (err) {
+      try {
+        const { API_BASE_URL } = await import('@/config/api');
+        await fetch(`${API_BASE_URL}/notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, message, type }) });
+      } catch {}
+    }
   } catch (e) {
     console.warn('notifyUser failed (non-blocking):', e);
   }
@@ -69,14 +76,35 @@ export const notifyAll = async (title: string, message: string, type: AppNotific
       }, new Map<string, string>()).values()
     );
 
-    if (uniqueEmails.length === 0) return; // Nothing to do
+    if (uniqueEmails.length === 0) {
+      try {
+        const { getLocalUsers } = await import('@/config/login');
+        const locals = await getLocalUsers();
+        const emailsLocal = locals.map(l => String(l.email || '').trim()).filter(Boolean);
+        for (const email of emailsLocal) {
+          await createNotification(sheetService, {
+            id: uuid(), title, message, type, createdAt: new Date().toISOString(),
+            read: false, userEmail: email,
+            route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
+          });
+        }
+      } catch {}
+      return;
+    }
 
     for (const email of uniqueEmails) {
-      await createNotification(sheetService, {
-        id: uuid(), title, message, type, createdAt: new Date().toISOString(),
-        read: false, userEmail: email,
-        route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
-      });
+      try {
+        await createNotification(sheetService, {
+          id: uuid(), title, message, type, createdAt: new Date().toISOString(),
+          read: false, userEmail: email,
+          route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
+        });
+      } catch (err) {
+        try {
+          const { API_BASE_URL } = await import('@/config/api');
+          await fetch(`${API_BASE_URL}/notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, message, type }) });
+        } catch {}
+      }
     }
   } catch (e) {
     console.warn('notifyAll failed (non-blocking):', e);
@@ -121,7 +149,7 @@ export const notifyAdmin = async (title: string, message: string, meta?: Notific
       }
     }
 
-    const uniqueAdmins = Array.from(
+    let uniqueAdmins = Array.from(
       users.reduce((acc, u) => {
         if (!u.email) return acc;
         if (!u.role.includes('admin')) return acc;
@@ -130,13 +158,27 @@ export const notifyAdmin = async (title: string, message: string, meta?: Notific
         return acc;
       }, new Map<string, string>()).values()
     );
+    if (uniqueAdmins.length === 0) {
+      try {
+        const { getLocalUsers } = await import('@/config/login');
+        const locals = await getLocalUsers();
+        uniqueAdmins = locals.filter(l => l.role === 'admin').map(l => l.email).filter(Boolean);
+      } catch {}
+    }
 
     for (const email of uniqueAdmins) {
-      await createNotification(sheetService, {
-        id: uuid(), title, message, type: 'admin', createdAt: new Date().toISOString(),
-        read: false, userEmail: email,
-        route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
-      });
+      try {
+        await createNotification(sheetService, {
+          id: uuid(), title, message, type: 'admin', createdAt: new Date().toISOString(),
+          read: false, userEmail: email,
+          route: meta?.route, targetTravellerName: meta?.targetTravellerName, targetDateTime: meta?.targetDateTime, targetTripId: meta?.targetTripId,
+        });
+      } catch (err) {
+        try {
+          const { API_BASE_URL } = await import('@/config/api');
+          await fetch(`${API_BASE_URL}/notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, message, type: 'admin' }) });
+        } catch {}
+      }
     }
   } catch (e) {
     console.warn('notifyAdmin failed (non-blocking):', e);
