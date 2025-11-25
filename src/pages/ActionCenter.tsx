@@ -8,7 +8,7 @@ import { stateManager } from '@/lib/stateManager';
 import PullToRefresh from '@/components/PullToRefresh';
 import { GoogleSheetsService } from '@/lib/googleSheets';
 import { cacheGet, cacheSet } from '@/lib/appCache';
-import { Archive, Bell, Fire, Inbox, Star } from 'lucide-react';
+import { Archive, Bell, Flame, Inbox, Star } from 'lucide-react';
 import { notificationSettingsService } from '@/lib/notificationSettings'; // Import notificationSettingsService
 
 // A more detailed item for the Action Center
@@ -22,7 +22,7 @@ const ActionItem = ({ item, onClick, onSnooze }: { item: AppNotification; onClic
       case 'trip_assigned':
         return <Star className="h-5 w-5 text-yellow-500" />;
       case 'trip_booked':
-        return <Fire className="h-5 w-5 text-red-500" />;
+        return <Flame className="h-5 w-5 text-red-500" />;
       default:
         return <Inbox className="h-5 w-5 text-gray-500" />;
     }
