@@ -57,7 +57,7 @@ export function useCRMData() {
           id: `new-leads-${Date.now()}`,
           type: 'new_trip',
           title: `${relevantNewLeads.length} New Lead${relevantNewLeads.length > 1 ? 's' : ''}`,
-          message: `New trips for ${relevantNewLeads.map(l => l.travellerName).join(', ')}.`,S
+          message: `New trips for ${relevantNewLeads.map(l => l.travellerName).join(', ')}.`,
           createdAt: new Date().toISOString(),
         };
         await triggerNativeNotification(notification);

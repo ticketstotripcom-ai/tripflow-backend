@@ -1,4 +1,5 @@
-import { createNotification, AppNotification } from './notifications';
+import { createNotification } from '@/services/notificationService';
+import { AppNotification } from './notifications';
 // Do NOT import React hooks here; this module runs outside React components
 import { GoogleSheetsService } from '@/lib/googleSheets';
 import { secureStorage } from '@/lib/secureStorage';

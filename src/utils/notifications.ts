@@ -38,7 +38,6 @@ const mapRowToNotification = (row: any[], index: number): AppNotification | null
   const targetDateTime = String(row[9] ?? '').trim() || undefined;
   const targetTripId = String(row[10] ?? '').trim() || undefined;
   const internalId = String(row[14] ?? '').trim() || undefined; // Assuming column O for internalId
-  const internalId = String(row[14] ?? '').trim() || undefined; // Assuming column O for internalId
   // Fallback ID: if internalId from sheet isn't available, create a unique one
   const id = internalId || `${createdAt}|${userEmail || ''}|${title}|${index}`;
 
@@ -56,7 +55,6 @@ const mapRowToNotification = (row: any[], index: number): AppNotification | null
     targetTripId,
     sheetRowNumber: index + 2,
     internalId: internalId || id, // Ensure internalId is always present
-  };
   };
 };
 
