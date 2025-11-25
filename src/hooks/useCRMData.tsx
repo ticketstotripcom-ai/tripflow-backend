@@ -22,9 +22,13 @@ export function useCRMData() {
 
   const detectAndNotify = useCallback(async (freshLeads: SheetLead[]) => {
     const oldLeads = stateManager.getCachedLeads().leads || [];
+    console.log('[useCRMData] detectAndNotify - Old Leads count:', oldLeads.length);
+    console.log('[useCRMData] detectAndNotify - Fresh Leads count:', freshLeads.length);
+
     if (oldLeads.length === 0) {
       // Don't notify on the very first load, just cache and exit.
       stateManager.setCachedLeads(freshLeads);
+      console.log('[useCRMData] detectAndNotify - Initial cache set, no diff performed.');
       return;
     }
 
@@ -32,6 +36,7 @@ export function useCRMData() {
     const currentUser = authService.getSession()?.user || null;
     if (!currentUser?.email) {
       stateManager.setCachedLeads(freshLeads);
+      console.warn('[useCRMData] detectAndNotify - No current user, cache set, no diff performed.');
       return;
     }
 
@@ -52,7 +57,7 @@ export function useCRMData() {
           id: `new-leads-${Date.now()}`,
           type: 'new_trip',
           title: `${relevantNewLeads.length} New Lead${relevantNewLeads.length > 1 ? 's' : ''}`,
-          message: `New trips for ${relevantNewLeads.map(l => l.travellerName).join(', ')}.`,
+          message: `New trips for ${relevantNewLeads.map(l => l.travellerName).join(', ')}.`,S
           createdAt: new Date().toISOString(),
         };
         await triggerNativeNotification(notification);
@@ -135,6 +140,7 @@ export function useCRMData() {
 
     // Finally, update the cache for the next diff.
     stateManager.setCachedLeads(freshLeads);
+    console.log('[useCRMData] detectAndNotify - Cached leads updated with fresh leads. New count:', freshLeads.length);
   }, []);
 
   const syncData = useCallback(

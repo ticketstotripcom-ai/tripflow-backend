@@ -1,5 +1,83 @@
 # TTT CRM - Changelog
 
+## Version 1.5.7 - Enhanced Notification Brain & Critical Bug Fixes by Gemini (November 25, 2025)
+
+### 🚨 Critical Bug Fixes & Stability Improvements
+
+#### 1. Reliable Push Notifications on Locked Devices (Android)
+- **Problem**: Push notifications were not reliably received on locked Android devices, severely limiting the app's ability to engage users outside the app.
+- **Root Cause**: The Android application's `AndroidManifest.xml` was missing crucial declarations for Firebase Cloud Messaging (FCM) services and permissions required to process push notifications when the app was in the background or killed.
+- **Solution (by Gemini)**:
+  - Added `android.permission.WAKE_LOCK`, `android.permission.VIBRATE`, `com.google.android.c2dm.permission.RECEIVE`, and a custom push provider permission (`${applicationId}.permission.PUSH_PROVIDER`) to `AndroidManifest.xml`.
+  - Declared the `com.getcapacitor.community.fcm.FcmService` within the `<application>` tag in `AndroidManifest.xml`, ensuring FCM messages are properly handled.
+  - Added `default_notification_channel_id` meta-data to ensure notifications are routed correctly.
+- **Impact**: Android devices can now reliably receive and display push notifications even when the app is locked or in the background, significantly improving user engagement and responsiveness.
+- **Action Required**: Users must run `npx cap sync android` and rebuild the Android application for these changes to take effect.
+
+#### 2. Resolved Repeated Notifications & Empty Notification List
+- **Problem**: Users were receiving repeated local notifications, and the in-app notification list (including the new Action Center) often appeared empty, leading to confusion and missed tasks.
+- **Root Cause**: A combination of factors:
+  - Persistence failures to the Google Sheet were not clearly communicated to the user.
+  - The notification UI was not displaying notifications saved to the offline store when sheet writes failed.
+  - Potential issues with CRM data caching could lead to repeated diffs and notifications.
+- **Solution (by Gemini)**:
+  - **User Feedback for Offline Persistence**: Modified `src/services/notificationService.ts` to display a "Notifications Offline" toast message when notifications cannot be written to the Google Sheet and are instead saved to the local IndexedDB. This provides transparent feedback to the user.
+  - **Unified Notification Display**: Enhanced `src/utils/notifications.ts` to merge notifications fetched from both the Google Sheet and the local IndexedDB. This ensures that all notifications, whether online or offline, are displayed in the UI, making the Action Center and Notification Bell resilient to connectivity or sheet issues. Deduplication logic ensures sheet data takes precedence.
+  - **CRM Data Cache Verification**: Added logging to `src/hooks/useCRMData.tsx` to monitor the caching of lead data, which is crucial for the `diffLeads` function to correctly identify new changes and prevent repeated notifications from the CRM data sync.
+- **Impact**: Notifications are no longer repeated unnecessarily, and the in-app notification views (Bell popup and Action Center) provide a comprehensive and consistent list of all notifications, even when offline or facing temporary sheet write issues.
+
+### ✨ Enhanced Notification Brain Features
+
+#### 1. Central "Action Center" UI
+- **Description**: Implemented a new dedicated page at `/action-center` serving as a robust hub for managing all notifications.
+- **Impact**: Provides a single, organized place for users to prioritize and act on important tasks.
+- **Files Affected**: `src/pages/ActionCenter.tsx`, `src/App.tsx`, `src/components/BottomNavigation.tsx`
+
+#### 2. Unified Notification Persistence
+- **Description**: WebSocket-driven real-time notifications are now also persisted to the Google Sheet, in addition to local IndexedDB.
+- **Impact**: Ensures all notifications, regardless of origin, contribute to a complete historical record in the primary data source.
+- **Files Affected**: `src/hooks/useWebSocketNotifications.tsx`
+
+#### 3. Smart Grouping and Prioritization
+- **Description**: Notifications within the Action Center are automatically grouped by lead/customer (`targetTravellerName` or `targetTripId`) and sorted by unread status, priority, and recency.
+- **Impact**: Dramatically improves notification readability and helps users focus on the most critical information related to specific leads.
+- **Files Affected**: `src/pages/ActionCenter.tsx`
+
+#### 4. "Needs Attention" Filter
+- **Description**: A new filter option has been added to the Action Center, allowing users to quickly view only notifications that are unread, high-priority, or have specific action-oriented next steps.
+- **Impact**: Transforms the Action Center into an actionable to-do list, guiding users to immediate sales opportunities.
+- **Files Affected**: `src/pages/ActionCenter.tsx`
+
+#### 5. "Smart Snooze" Feature
+- **Description**: Users can now snooze individual notifications for one hour from within the Action Center. Snoozed notifications are hidden and reappear automatically after their snooze period.
+- **Impact**: Provides flexibility for users to manage their focus, ensuring important notifications resurface when they are ready to act.
+- **Files Affected**: `src/pages/ActionCenter.tsx`, `src/lib/notificationSettings.ts`
+
+#### 6. Enhanced Notification Bell Popup
+- **Description**: The bell icon's dropdown now functions as a mini-dashboard, showcasing the top 5 most urgent "Needs Attention" notifications and offering a direct link to the full Action Center.
+- **Impact**: Offers a quick, prioritized overview without needing to navigate away, enhancing the app's responsiveness.
+- **Files Affected**: `src/components/notifications/NotificationBell.tsx`
+
+### ✍️ Authored by
+- Gemini
+
+---
+
+## Version 1.5.5 - Notifications Stability by Trae (November 25, 2025)
+
+### Fixes
+
+- Prevented post-permission app crash by guarding LocalNotifications plugin availability and using safe numeric IDs. Implemented in `src/lib/nativeNotifications.ts`.
+- Corrected notification type mapping to match the "Notifications" sheet schema (uses `NotificationType` column). Implemented in `src/utils/notifications.ts`.
+- Ensured notification list shows items even when Google Sheets hits the 10,000,000-cell limit by writing to an offline store and merging in the bell popup. Implemented in `src/services/notificationService.ts` and `src/components/NotificationBell.tsx`.
+- Kept Android native scheduling minimal (no native icon/sound fields) and play PNG icons only on web notifications to avoid drawable/resource crashes.
+
+### Author
+
+- Trae
+
+---
+
 ## Version 1.5.4 - Stability & Notifications by Trae (November 25, 2025)
 
 ### Fixes

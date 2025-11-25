@@ -3,6 +3,7 @@
 import { GoogleSheetsService } from "@/lib/googleSheets";
 import { secureStorage } from "@/lib/secureStorage";
 import { openDB } from "idb";
+import { toast } from "@/hooks/use-toast";
 
 export type NotificationType = "push" | "in-app" | "local" | "heads-up" | "badge" | "message";
 export type NotificationPriority = "low" | "normal" | "high";
@@ -316,6 +317,7 @@ export async function createNotification(input: NewNotificationInput): Promise<v
   } catch (e) {
     console.warn(`[notificationService] Could not create notification online, writing to offline store. Error: ${e}`);
     await writeOffline(input);
+    toast({ title: 'Notifications Offline', description: 'Could not save notification online. Saving offline, will sync later.', variant: 'destructive', duration: 5000 });
   }
 }
 
@@ -348,5 +350,6 @@ export async function createNotifications(inputs: NewNotificationInput[]): Promi
   } catch (e) {
     console.warn(`[notificationService] Could not create notifications online, writing to offline store. Error: ${e}`);
     await writeOffline(inputs);
+    toast({ title: 'Notifications Offline', description: 'Could not save notifications online. Saving offline, will sync later.', variant: 'destructive', duration: 5000 });
   }
 }
