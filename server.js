@@ -31,6 +31,9 @@ if (firebaseServiceAccountJson) {
 // --- FCM Token Storage ---
 const fcmTokens = new Set(); // Stores unique FCM registration tokens
 
+// --- In-memory Notification Store ---
+const notifications = [];
+
 
 // --- WebSocket Setup ---
 const server = http.createServer(app);
@@ -128,9 +131,32 @@ function processSheetEdit(eventData) {
 
   if (notification) {
     // Add common fields
-    notification.createdAt = new Date().toISOString();
+    const createdAt = new Date().toISOString();
+    notification.createdAt = createdAt;
     console.log('Generated notification:', notification);
-    broadcast(notification);
+
+    const id = notification.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const roleTarget = notification.role || notification.roleTarget || 'all';
+
+    const backendNotification = {
+      id,
+      userEmail: notification.userEmail || null,
+      type: notification.type || 'general',
+      title: notification.title || '',
+      message: notification.message || '',
+      route: notification.route,
+      meta: notification.meta,
+      createdAt,
+      read: false,
+      priority: notification.priority || 'normal',
+      nextAction: notification.nextAction,
+      source: `sheet:${sheetName}`,
+      roleTarget,
+    };
+
+    notifications.push(backendNotification);
+
+    broadcast(backendNotification);
   }
 
   return notification;
@@ -221,8 +247,6 @@ function handleBlackboardChanges(data) {
     if (postType === 'announcement') notification.title = 'New Announcement';
     else if (postType === 'update') notification.title = 'System Update';
     else if (postType === 'alert') notification.title = 'Important Alert';
-    
-    return notification;
 }
 
 
@@ -231,6 +255,43 @@ function handleBlackboardChanges(data) {
 // Test route
 app.get('/', (req, res) => {
   res.send('✅ Tripflow Backend is running!');
+});
+
+// Notifications API - list notifications for a user
+app.get('/api/notifications', validateSecret, (req, res) => {
+  const userEmailRaw = (req.query.userEmail || '').toString().trim().toLowerCase();
+
+  let result = notifications;
+  if (userEmailRaw) {
+    result = notifications.filter((n) => {
+      const nEmail = (n.userEmail || '').toString().toLowerCase();
+      if (nEmail && nEmail === userEmailRaw) return true;
+      if (n.roleTarget === 'all') return true;
+      return false;
+    });
+  }
+
+  const unreadSorted = result
+    .filter((n) => !n.read)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  res.json(unreadSorted);
+});
+
+// Notifications API - mark a notification as read
+app.patch('/api/notifications/:id/read', validateSecret, (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Notification id is required' });
+  }
+
+  const notif = notifications.find((n) => n.id === id);
+  if (!notif) {
+    return res.status(404).json({ error: 'Notification not found' });
+  }
+
+  notif.read = true;
+  return res.json({ success: true });
 });
 
 // Endpoint to register/unregister FCM tokens
