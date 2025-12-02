@@ -77,7 +77,7 @@ async function broadcast(data) {
       console.log('FCM messages sent:', response.successCount, 'succeeded,', response.failureCount, 'failed.');
 
       if (response.failureCount > 0) {
-        const failedTokens: string[] = [];
+        const failedTokens = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             failedTokens.push(message.tokens[idx]);

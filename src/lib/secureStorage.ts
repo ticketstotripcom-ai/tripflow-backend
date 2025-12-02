@@ -77,6 +77,7 @@ export interface SecureCredentials {
   worksheetNames: string[];
   columnMappings: Record<string, string>;
   paymentLinks?: { name: string; url: string; qrImage?: string }[];
+  notifySecret?: string;
   // Multi-sheet support (optional; preserves backward compatibility)
   sheets?: Array<{
     name: string;
@@ -141,7 +142,8 @@ export const secureStorage = {
           googleSheetUrl: localSecrets.spreadsheetUrl,
           worksheetNames: localSecrets.worksheetNames,
           columnMappings: localSecrets.columnMappings,
-          paymentLinks: localSecrets.paymentLinks
+          paymentLinks: localSecrets.paymentLinks,
+          notifySecret: "Tickets@2018",
         };
       }
       
@@ -152,6 +154,11 @@ export const secureStorage = {
       const key = await getEncryptionKey();
       const decrypted = simpleDecrypt(value, key);
       const parsed = JSON.parse(decrypted) as SecureCredentials;
+
+      // Ensure notifySecret is always present for backend auth
+      if (!parsed.notifySecret) {
+        parsed.notifySecret = "Tickets@2018";
+      }
 
       if (!parsed.googleServiceAccountJson) {
         const persisted = await readPersistedServiceAccountJson();
